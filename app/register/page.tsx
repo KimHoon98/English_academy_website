@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase/client';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -37,13 +37,19 @@ export default function RegisterPage() {
         email,
         password,
         options: {
-          // 가입 즉시 로그인이 되게 하거나, 이메일 인증을 보낼 수 있습니다.
           emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
 
       if (signUpError) {
         setError(signUpError.message);
+        setIsLoading(false);
+        return;
+      }
+
+      // 이미 가입된 이메일 체크
+      if (data.user && data.user.identities?.length === 0) {
+        setError('이미 가입된 이메일입니다. 로그인 페이지로 이동해주세요.');
         setIsLoading(false);
         return;
       }

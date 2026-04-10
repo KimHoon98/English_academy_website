@@ -5,10 +5,6 @@ import { useRouter } from 'next/navigation';
 
 export default function ConsultationPage() {
   const router = useRouter();
-  
-  // 테스트용 로그인 상태 (실제 환경에서는 서버 세션 등으로 대체)
-  const isLoggedIn = false; 
-  
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     parentName: '',
@@ -18,7 +14,6 @@ export default function ConsultationPage() {
     message: '',
   });
 
-  // 연락처 자동 하이픈 생성 함수
   const formatPhoneNumber = (value: string) => {
     if (!value) return value;
     const phoneNumber = value.replace(/[^\d]/g, '');
@@ -33,44 +28,27 @@ export default function ConsultationPage() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    
-    if (name === 'phoneNumber') {
-      setFormData({
-        ...formData,
-        [name]: formatPhoneNumber(value),
-      });
-    } else {
-      setFormData({
-        ...formData,
-        [name]: value,
-      });
-    }
+    setFormData({
+      ...formData,
+      [name]: name === 'phoneNumber' ? formatPhoneNumber(value) : value,
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    // 1. 로그인 체크 로직
-    if (!isLoggedIn) {
-      const confirmLogin = confirm(
-        '상담 신청은 로그인 이후 가능합니다.\n로그인 페이지로 이동하시겠습니까?'
-      );
-      
-      if (confirmLogin) {
-        router.push('/login');
-      }
-      return;
-    }
-
-    // 2. 로그인 되어있을 때 신청 로직
     setIsSubmitting(true);
 
     try {
-      // API 호출 시뮬레이션 (1초 대기)
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      
+      const response = await fetch('/api/consultation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+
+      if (!response.ok) throw new Error();
+
       alert(`${formData.parentName}님, 상담 신청이 정상적으로 접수되었습니다.\n빠른 시일 내에 연락드리겠습니다!`);
-      router.push('/'); // 성공 후 메인으로 이동
+      router.push('/');
     } catch (error) {
       alert('오류가 발생했습니다. 다시 시도해주세요.');
     } finally {
@@ -136,7 +114,7 @@ export default function ConsultationPage() {
                     name="parentName"
                     required
                     placeholder="성함을 입력해주세요"
-                    className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 opacity-100 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                    className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
                     onChange={handleChange}
                   />
                 </div>
@@ -150,7 +128,7 @@ export default function ConsultationPage() {
                     maxLength={13}
                     inputMode="numeric"
                     value={formData.phoneNumber}
-                    className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 opacity-100 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                    className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
                     onChange={handleChange}
                   />
                 </div>
@@ -164,7 +142,7 @@ export default function ConsultationPage() {
                     name="childName"
                     required
                     placeholder="아이 이름을 입력해주세요"
-                    className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 opacity-100 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                    className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
                     onChange={handleChange}
                   />
                 </div>
@@ -199,7 +177,7 @@ export default function ConsultationPage() {
                   name="message"
                   rows={4}
                   placeholder="예: 레벨 테스트 가능한 시간대나 아이의 현재 영어 학습 상태를 적어주세요."
-                  className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 opacity-100 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition resize-none"
+                  className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition resize-none"
                   onChange={handleChange}
                 ></textarea>
               </div>
@@ -208,14 +186,14 @@ export default function ConsultationPage() {
                 type="submit"
                 disabled={isSubmitting}
                 className={`w-full py-5 rounded-2xl text-xl font-black transition-all duration-300 transform shadow-lg shadow-slate-200 ${
-                  isSubmitting 
-                    ? 'bg-slate-400 cursor-not-allowed' 
+                  isSubmitting
+                    ? 'bg-slate-400 cursor-not-allowed'
                     : 'bg-slate-900 text-white hover:bg-blue-600 hover:-translate-y-1'
                 }`}
               >
                 {isSubmitting ? '신청 접수 중...' : '상담 신청 완료하기'}
               </button>
-              
+
               <p className="text-center text-slate-400 text-xs mt-4">
                 * 개인정보는 상담 목적으로만 사용되며 안전하게 보호됩니다.
               </p>

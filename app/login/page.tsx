@@ -2,39 +2,39 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase'; // 설정하신 supabase 클라이언트 불러오기
+import { useRouter, useSearchParams } from 'next/navigation';
+import { supabase } from '@/lib/supabase/client';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false); // 로딩 상태 추가
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(''); 
+    setError('');
     setIsLoading(true);
 
     try {
-      // --- Supabase 실제 로그인 로직 ---
       const { data, error: supabaseError } = await supabase.auth.signInWithPassword({
-        email: email,
-        password: password,
+        email,
+        password,
       });
 
       if (supabaseError) {
-        // 비밀번호 틀림 등 인증 에러 처리
         setError('이메일 또는 비밀번호가 일치하지 않습니다.');
         setIsLoading(false);
         return;
       }
 
       if (data.user) {
-        alert('성공적으로 로그인되었습니다!');
-        router.push('/'); 
-        router.refresh(); // 세션 상태를 앱 전체에 반영하기 위해 새로고침 효과
+        // ?next= 파라미터가 있으면 그 페이지로, 없으면 메인으로
+        const next = searchParams.get('next') || '/';
+        router.push(next);
+        router.refresh();
       }
     } catch (err) {
       setError('로그인 중 알 수 없는 오류가 발생했습니다.');
@@ -70,7 +70,7 @@ export default function LoginPage() {
               required
               placeholder="example@email.com"
               disabled={isLoading}
-              className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 opacity-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
+              className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
             />
           </div>
 
@@ -88,7 +88,7 @@ export default function LoginPage() {
               required
               placeholder="••••••••"
               disabled={isLoading}
-              className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 opacity-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
+              className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
             />
           </div>
 
@@ -96,8 +96,8 @@ export default function LoginPage() {
             type="submit"
             disabled={isLoading}
             className={`w-full py-5 rounded-2xl text-lg font-black transition-all duration-300 transform shadow-lg shadow-slate-200 ${
-              isLoading 
-                ? 'bg-slate-400 cursor-not-allowed' 
+              isLoading
+                ? 'bg-slate-400 cursor-not-allowed'
                 : 'bg-slate-900 text-white hover:bg-blue-600 hover:-translate-y-1'
             }`}
           >
@@ -113,8 +113,7 @@ export default function LoginPage() {
           </Link>
         </div>
       </div>
-      
-      {/* 푸터 */}
+
       <p className="text-center text-slate-400 text-xs mt-10">
         © 2024 THE ARK ENGLISH. All rights reserved.
       </p>

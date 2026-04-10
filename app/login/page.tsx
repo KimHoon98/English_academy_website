@@ -15,31 +15,21 @@ export default function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
     setIsLoading(true);
 
-    try {
-      const { data, error: supabaseError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-      if (supabaseError) {
-        setError('이메일 또는 비밀번호가 일치하지 않습니다.');
-        setIsLoading(false);
-        return;
-      }
-
-      if (data.user) {
-        // ?next= 파라미터가 있으면 그 페이지로, 없으면 메인으로
-        const next = searchParams.get('next') || '/';
-        router.push(next);
-        router.refresh();
-      }
-    } catch (err) {
-      setError('로그인 중 알 수 없는 오류가 발생했습니다.');
+    if (error) {
+      alert('로그인 실패: ' + error.message);
       setIsLoading(false);
+      return;
     }
+
+    // ✅ 더 확실하게 새로고침하며 이동
+    window.location.replace('/'); 
   };
 
   return (

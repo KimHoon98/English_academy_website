@@ -1,0 +1,2603 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.gitignore
+app/academy/page.tsx
+app/admin/consultations/page.tsx
+app/auth/callback/page.tsx
+app/auth/login/route.ts
+app/auth/logout/route.ts
+app/consultation/page.tsx
+app/find-password/page.tsx
+app/globals.css
+app/layout.tsx
+app/level-test/page.tsx
+app/login/page.tsx
+app/page.tsx
+app/profile/page.tsx
+app/register/page.tsx
+app/reset-password/page.tsx
+components/dashboard/AdminDashboard.tsx
+components/dashboard/LogoutButton.tsx
+components/dashboard/ParentDashboard.tsx
+components/profile/AdminProfile.tsx
+components/profile/ProfileClient.tsx
+eslint.config.mjs
+lib/hello.py
+next.config.ts
+package.json
+postcss.config.mjs
+proxy.ts
+public/classroom_1.jpg
+public/classroom_2.jpg
+public/classroom_3.jpg
+public/classroom_4.jpg
+public/hallway_1.jpg
+public/Location_academy.png
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="app/admin/consultations/page.tsx">
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
+import { redirect } from 'next/navigation';
+import AdminDashboard from '@/components/dashboard/AdminDashboard';
+
+export default async function AdminConsultationsPage() {
+  const cookieStore = await cookies();
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll(); },
+      },
+    }
+  );
+
+  const { data: { session } } = await supabase.auth.getSession();
+
+  // 로그인 안 됐으면 로그인 페이지로
+  if (!session) redirect('/login');
+
+  // 원장 아니면 프로필로 튕기기
+  if (session.user.email !== 'daniel3954@gmail.com') redirect('/profile');
+
+  return (
+    <div className="max-w-5xl mx-auto py-20 px-6">
+      <div className="mb-8 flex items-center gap-4">
+        <a href="/profile" className="text-slate-400 hover:text-slate-600 transition text-sm font-bold">
+          ← 대시보드로 돌아가기
+        </a>
+      </div>
+      <h1 className="text-3xl font-black text-slate-900 mb-2">상담 신청 내역</h1>
+      <p className="text-slate-500 mb-10">최근 1년간 접수된 모든 상담 신청을 확인하고 답변할 수 있어요.</p>
+      <AdminDashboard />
+    </div>
+  );
+}
+</file>
+
+<file path="app/auth/callback/page.tsx">
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { supabase } from '@/lib/supabase/client';
+import Link from 'next/link';
+
+export default function AuthCallbackPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+
+  useEffect(() => {
+    const error = searchParams.get('error');
+    const errorCode = searchParams.get('error_code');
+
+    if (error || errorCode) {
+      setStatus('error');
+      return;
+    }
+
+    // 해시에서 토큰 처리 (Supabase가 #access_token=... 형식으로 보냄)
+    const handleCallback = async () => {
+      const { data, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !data.session) {
+        // 해시 파라미터로 세션 교환 시도
+        const hashParams = new URLSearchParams(window.location.hash.slice(1));
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+
+        if (accessToken && refreshToken) {
+          const { error: setError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (setError) {
+            setStatus('error');
+            return;
+          }
+        } else {
+          setStatus('error');
+          return;
+        }
+      }
+      setStatus('success');
+    };
+
+    handleCallback();
+  }, [searchParams]);
+
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-slate-500 font-medium">확인 중입니다...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === 'error') {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center px-6">
+        <div className="bg-white rounded-3xl shadow-xl p-10 max-w-md w-full text-center border border-slate-100">
+          <div className="text-5xl mb-6">😢</div>
+          <h2 className="text-2xl font-black text-slate-900 mb-3">링크가 만료됐어요</h2>
+          <p className="text-slate-500 mb-8 leading-relaxed">
+            인증 링크가 만료되었거나 이미 사용된 링크예요.<br />
+            다시 회원가입을 시도해주세요.
+          </p>
+          <Link href="/register"
+            className="w-full block py-4 bg-slate-900 text-white rounded-2xl font-black text-lg hover:bg-blue-600 transition text-center">
+            회원가입 다시 하기
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-6">
+      <div className="bg-white rounded-3xl shadow-xl p-10 max-w-md w-full text-center border border-slate-100">
+        <div className="text-6xl mb-6">🎉</div>
+        <h2 className="text-2xl font-black text-slate-900 mb-3">회원가입 완료!</h2>
+        <p className="text-slate-500 mb-8 leading-relaxed">
+          디아크 잉글리시 회원이 되신 것을 환영합니다!<br />
+          이제 모든 서비스를 이용하실 수 있어요.
+        </p>
+        <div className="flex flex-col gap-3">
+          <Link href="/"
+            className="w-full block py-4 bg-slate-900 text-white rounded-2xl font-black text-lg hover:bg-blue-600 transition text-center">
+            홈으로 가기
+          </Link>
+          <Link href="/consultation"
+            className="w-full block py-4 bg-blue-50 text-blue-600 rounded-2xl font-bold text-lg hover:bg-blue-100 transition text-center">
+            상담 신청하러 가기
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="app/auth/login/route.ts">
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+import { NextResponse } from 'next/server'
+
+export async function POST(req: Request) {
+  const { email, password } = await req.json()
+
+  const cookieStore = await cookies()
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll()
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            )
+          } catch {
+            // 무시
+          }
+        },
+      },
+    }
+  )
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  })
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 400 })
+  }
+
+  return NextResponse.json({ success: true })
+}
+</file>
+
+<file path="app/level-test/page.tsx">
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase/client';
+
+const grades = [
+  { id: 'A1', label: '초등학교 1학년', group: '초등' },
+  { id: 'A2', label: '초등학교 2학년', group: '초등' },
+  { id: 'A3', label: '초등학교 3학년', group: '초등' },
+  { id: 'A4', label: '초등학교 4학년', group: '초등' },
+  { id: 'A5', label: '초등학교 5학년', group: '초등' },
+  { id: 'A6', label: '초등학교 6학년', group: '초등' },
+  { id: 'B1', label: '중학교 1학년', group: '중등' },
+  { id: 'B2', label: '중학교 2학년', group: '중등' },
+  { id: 'B3', label: '중학교 3학년', group: '중등' },
+];
+  
+export default function LevelTestPage() {
+    const [authChecked, setAuthChecked] = useState(false);
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+    useEffect(() => {
+    const checkAuth = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        setIsLoggedIn(!!user);
+        setAuthChecked(true);
+    };
+    checkAuth();
+    }, []);
+  const router = useRouter();
+  const [selected, setSelected] = useState<string | null>(null);
+
+  const elementary = grades.filter(g => g.group === '초등');
+  const middle = grades.filter(g => g.group === '중등');
+
+  const handleStart = () => {
+    if (!selected) return;
+    router.push(`/level-test/${selected.toLowerCase()}`);
+  };
+  if (!authChecked) return null;
+
+    if (!isLoggedIn) {
+    return (
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center px-6">
+        <div className="bg-white rounded-3xl shadow-xl p-10 max-w-md w-full text-center border border-slate-100">
+            <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
+            <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            </div>
+            <h2 className="text-2xl font-black text-slate-900 mb-3">로그인이 필요해요</h2>
+            <p className="text-slate-500 mb-8 leading-relaxed">
+            레벨 테스트는 회원만 이용할 수 있어요.<br />
+            로그인 후 이용해주세요.
+            </p>
+            <div className="flex flex-col gap-3">
+            <Link href="/login"
+                className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-lg hover:bg-blue-600 transition text-center">
+                로그인하러 가기
+            </Link>
+            <button onClick={() => router.back()}
+                className="w-full py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold text-lg hover:bg-slate-200 transition cursor-pointer">
+                돌아가기
+            </button>
+            </div>
+        </div>
+        </div>
+    );
+    }
+  return (
+    <div className="min-h-screen bg-slate-50 pt-32 pb-20 px-6">
+      <div className="max-w-3xl mx-auto">
+
+        {/* 헤더 */}
+        <div className="text-center mb-14">
+          <span className="text-blue-600 font-bold tracking-widest uppercase text-sm mb-4 block">Level Test</span>
+          <h1 className="text-4xl md:text-5xl font-black text-slate-900 mb-6">레벨 테스트</h1>
+          <p className="text-slate-600 text-lg leading-relaxed">
+            아이의 현재 영어 실력을 정확하게 파악하고<br />
+            딱 맞는 수업 레벨을 찾아드립니다.
+          </p>
+        </div>
+
+        {/* 안내 카드 */}
+        <div className="bg-blue-600 rounded-[2rem] p-8 text-white mb-10 shadow-xl shadow-blue-200">
+          <h3 className="text-lg font-black mb-4">테스트 안내</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-blue-50 text-sm">
+            <div className="flex items-start gap-3">
+              <span className="bg-white/20 w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-white font-bold text-xs">1</span>
+              <span>학년을 선택해주세요</span>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="bg-white/20 w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-white font-bold text-xs">2</span>
+              <span>학년별 맞춤 문제를 풀어보세요</span>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="bg-white/20 w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-white font-bold text-xs">3</span>
+              <span>결과에 따라 최적 레벨을 안내드려요</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 학년 선택 */}
+        <div className="bg-white rounded-[2rem] p-8 md:p-10 shadow-sm border border-slate-100">
+          <h2 className="text-xl font-black text-slate-900 mb-6">학년을 선택해주세요</h2>
+
+          {/* 초등 */}
+          <div className="mb-8">
+            <p className="text-xs font-black text-blue-600 uppercase tracking-widest mb-3">초등학교 (A1 – A6)</p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {elementary.map(g => (
+                <button
+                  key={g.id}
+                  onClick={() => setSelected(g.id)}
+                  className={`py-4 px-4 rounded-2xl border-2 font-bold text-sm transition-all duration-200 cursor-pointer ${
+                    selected === g.id
+                      ? 'border-blue-600 bg-blue-600 text-white shadow-lg shadow-blue-200'
+                      : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-blue-300 hover:bg-blue-50'
+                  }`}
+                >
+                  <span className="block text-xs font-black mb-0.5 opacity-70">{g.id}</span>
+                  {g.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 중등 */}
+          <div className="mb-10">
+            <p className="text-xs font-black text-blue-600 uppercase tracking-widest mb-3">중학교 (B1 – B3)</p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {middle.map(g => (
+                <button
+                  key={g.id}
+                  onClick={() => setSelected(g.id)}
+                  className={`py-4 px-4 rounded-2xl border-2 font-bold text-sm transition-all duration-200 cursor-pointer ${
+                    selected === g.id
+                      ? 'border-blue-600 bg-blue-600 text-white shadow-lg shadow-blue-200'
+                      : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-blue-300 hover:bg-blue-50'
+                  }`}
+                >
+                  <span className="block text-xs font-black mb-0.5 opacity-70">{g.id}</span>
+                  {g.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 시작 버튼 */}
+          <button
+            onClick={handleStart}
+            disabled={!selected}
+            className={`w-full py-5 rounded-2xl text-xl font-black transition-all duration-300 transform shadow-lg ${
+              selected
+                ? 'bg-slate-900 text-white hover:bg-blue-600 hover:-translate-y-1 shadow-slate-200 cursor-pointer'
+                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+            }`}
+          >
+            {selected
+              ? `${grades.find(g => g.id === selected)?.label} 테스트 시작하기 →`
+              : '학년을 먼저 선택해주세요'
+            }
+          </button>
+
+          <p className="text-center text-slate-400 text-xs mt-4">
+            * 테스트는 약 10~15분 소요됩니다.
+          </p>
+        </div>
+
+        {/* 하단 상담 유도 */}
+        <div className="text-center mt-10">
+          <p className="text-slate-500 text-sm mb-2">테스트보다 직접 상담을 원하신다면?</p>
+          <Link href="/consultation" className="text-blue-600 font-bold hover:underline text-sm">
+            전문 선생님과 1:1 상담 신청하기 →
+          </Link>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="components/dashboard/AdminDashboard.tsx">
+'use client';
+
+import React, { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase/client';
+
+type Consultation = {
+  id: string;
+  created_at: string;
+  parent_name: string;
+  child_name: string;
+  child_grade: string;
+  phone: string;
+  message: string;
+  is_resolved: boolean;
+  admin_reply: string | null;
+  replied_at: string | null;
+};
+
+export default function AdminDashboard() {
+  const [consultations, setConsultations] = useState<Consultation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [replyText, setReplyText] = useState<{ [key: string]: string }>({});
+  const [submitting, setSubmitting] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchConsultations();
+  }, []);
+
+  const fetchConsultations = async () => {
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+    const { data, error } = await supabase
+      .from('consultations')
+      .select('*')
+      .gte('created_at', oneYearAgo.toISOString())
+      .order('created_at', { ascending: false });
+
+    if (!error && data) setConsultations(data);
+    setLoading(false);
+  };
+
+  const handleReply = async (id: string) => {
+    setSubmitting(id);
+    const { error } = await supabase
+      .from('consultations')
+      .update({
+        admin_reply: replyText[id],
+        is_resolved: true,
+        replied_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+
+    if (!error) {
+      await fetchConsultations();
+      setReplyText(prev => ({ ...prev, [id]: '' }));
+    }
+    setSubmitting(null);
+  };
+
+  const toggleResolved = async (id: string, current: boolean) => {
+    await supabase
+      .from('consultations')
+      .update({ is_resolved: !current })
+      .eq('id', id);
+    await fetchConsultations();
+  };
+
+  if (loading) return <div className="text-center py-10 text-slate-500">불러오는 중...</div>;
+
+  const resolved = consultations.filter(c => c.is_resolved);
+  const unresolved = consultations.filter(c => !c.is_resolved);
+
+  return (
+    <div className="space-y-10">
+      <div className="grid grid-cols-3 gap-4">
+        <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm text-center">
+          <p className="text-3xl font-black text-slate-900">{consultations.length}</p>
+          <p className="text-sm text-slate-500 mt-1">전체 신청</p>
+        </div>
+        <div className="bg-red-50 rounded-2xl p-6 border border-red-100 shadow-sm text-center">
+          <p className="text-3xl font-black text-red-500">{unresolved.length}</p>
+          <p className="text-sm text-slate-500 mt-1">미처리</p>
+        </div>
+        <div className="bg-blue-50 rounded-2xl p-6 border border-blue-100 shadow-sm text-center">
+          <p className="text-3xl font-black text-blue-600">{resolved.length}</p>
+          <p className="text-sm text-slate-500 mt-1">처리 완료</p>
+        </div>
+      </div>
+
+      <div>
+        <h2 className="text-xl font-black text-slate-900 mb-4">⏳ 미처리 신청 ({unresolved.length})</h2>
+        {unresolved.length === 0 ? (
+          <div className="bg-white rounded-2xl p-8 text-center text-slate-400 border border-slate-100">모든 신청이 처리되었습니다 🎉</div>
+        ) : (
+          <div className="space-y-4">
+            {unresolved.map(c => (
+              <ConsultationCard key={c.id} c={c} replyText={replyText} setReplyText={setReplyText}
+                submitting={submitting} handleReply={handleReply} toggleResolved={toggleResolved} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h2 className="text-xl font-black text-slate-900 mb-4">✅ 처리 완료 ({resolved.length})</h2>
+        {resolved.length === 0 ? (
+          <div className="bg-white rounded-2xl p-8 text-center text-slate-400 border border-slate-100">처리 완료된 신청이 없습니다.</div>
+        ) : (
+          <div className="space-y-4">
+            {resolved.map(c => (
+              <ConsultationCard key={c.id} c={c} replyText={replyText} setReplyText={setReplyText}
+                submitting={submitting} handleReply={handleReply} toggleResolved={toggleResolved} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ConsultationCard({ c, replyText, setReplyText, submitting, handleReply, toggleResolved }: {
+  c: Consultation;
+  replyText: { [key: string]: string };
+  setReplyText: React.Dispatch<React.SetStateAction<{ [key: string]: string }>>;
+  submitting: string | null;
+  handleReply: (id: string) => void;
+  toggleResolved: (id: string, current: boolean) => void;
+}) {
+  const [showReplyBox, setShowReplyBox] = useState(false);
+
+  return (
+    <div className={`bg-white rounded-2xl p-6 border shadow-sm ${c.is_resolved ? 'border-slate-100' : 'border-red-200'}`}>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${c.is_resolved ? 'bg-blue-100 text-blue-600' : 'bg-red-100 text-red-500'}`}>
+              {c.is_resolved ? '처리 완료' : '미처리'}
+            </span>
+            <span className="text-xs text-slate-400">{new Date(c.created_at).toLocaleDateString('ko-KR')}</span>
+          </div>
+          <p className="font-black text-slate-900">{c.parent_name} 학부모 · {c.child_name} ({c.child_grade})</p>
+          <p className="text-sm text-slate-500 mt-0.5">📞 {c.phone}</p>
+          {c.message && <p className="text-sm text-slate-600 mt-2 bg-slate-50 p-3 rounded-xl">{c.message}</p>}
+        </div>
+        <button onClick={() => toggleResolved(c.id, c.is_resolved)}
+          className="text-xs font-bold px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition text-slate-600 shrink-0 cursor-pointer">
+          {c.is_resolved ? '미처리로 변경' : '완료 처리'}
+        </button>
+      </div>
+
+      {c.admin_reply && (
+        <div className="mt-4 bg-blue-50 rounded-xl p-4 border border-blue-100">
+          <p className="text-xs font-bold text-blue-600 mb-1">✉️ 작성된 답변</p>
+          <p className="text-sm text-slate-700">{c.admin_reply}</p>
+          <p className="text-xs text-slate-400 mt-1">{c.replied_at && new Date(c.replied_at).toLocaleDateString('ko-KR')}</p>
+        </div>
+      )}
+
+      <div className="mt-4">
+        {!showReplyBox ? (
+          <button onClick={() => setShowReplyBox(true)}
+            className="text-sm text-blue-600 font-bold hover:underline cursor-pointer">
+            {c.admin_reply ? '답변 수정하기' : '+ 답변 작성하기'}
+          </button>
+        ) : (
+          <div className="space-y-2">
+            <textarea rows={3} value={replyText[c.id] ?? c.admin_reply ?? ''}
+              onChange={e => setReplyText(prev => ({ ...prev, [c.id]: e.target.value }))}
+              placeholder="학부모님께 전달할 답변을 입력하세요."
+              className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none" />
+            <div className="flex gap-2">
+              <button onClick={() => handleReply(c.id)} disabled={submitting === c.id}
+                className="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50 transition cursor-pointer">
+                {submitting === c.id ? '저장 중...' : '답변 저장'}
+              </button>
+              <button onClick={() => setShowReplyBox(false)}
+                className="text-sm px-4 py-2 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition cursor-pointer">
+                취소
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="components/dashboard/LogoutButton.tsx">
+'use client';
+
+export default function LogoutButton() {
+  const handleLogout = async () => {
+    await fetch('/auth/logout', { method: 'POST' });
+    window.location.href = '/';
+  };
+
+  return (
+    <button
+      onClick={handleLogout}
+      className="text-red-400 hover:text-red-600 transition font-bold text-[15px] cursor-pointer"
+    >
+      로그아웃
+    </button>
+  );
+}
+</file>
+
+<file path="components/dashboard/ParentDashboard.tsx">
+'use client';
+
+import React, { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase/client';
+
+type Consultation = {
+  id: string;
+  created_at: string;
+  parent_name: string;
+  child_name: string;
+  child_grade: string;
+  phone: string;
+  message: string;
+  is_resolved: boolean;
+  admin_reply: string | null;
+  replied_at: string | null;
+};
+
+export default function ParentDashboard({ userEmail }: { userEmail: string }) {
+  const [consultations, setConsultations] = useState<Consultation[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchMyConsultations = async () => {
+      const oneYearAgo = new Date();
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+      const { data, error } = await supabase
+        .from('consultations')
+        .select('*')
+        .gte('created_at', oneYearAgo.toISOString())
+        .order('created_at', { ascending: false });
+
+      if (!error && data) setConsultations(data);
+      setLoading(false);
+    };
+    fetchMyConsultations();
+  }, []);
+
+  if (loading) return <div className="text-center py-10 text-slate-500">불러오는 중...</div>;
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm text-center">
+          <p className="text-3xl font-black text-slate-900">{consultations.length}</p>
+          <p className="text-sm text-slate-500 mt-1">신청한 상담</p>
+        </div>
+        <div className="bg-blue-50 rounded-2xl p-6 border border-blue-100 shadow-sm text-center">
+          <p className="text-3xl font-black text-blue-600">{consultations.filter(c => c.admin_reply).length}</p>
+          <p className="text-sm text-slate-500 mt-1">답변 받은 상담</p>
+        </div>
+      </div>
+
+      <h2 className="text-xl font-black text-slate-900">📋 상담 신청 내역 (최근 1년)</h2>
+
+      {consultations.length === 0 ? (
+        <div className="bg-white rounded-2xl p-12 text-center border border-slate-100">
+          <p className="text-slate-400 mb-4">아직 상담 신청 내역이 없습니다.</p>
+          <a href="/consultation" className="text-blue-600 font-bold hover:underline">상담 신청하러 가기 →</a>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {consultations.map(c => (
+            <div key={c.id} className={`bg-white rounded-2xl p-6 border shadow-sm ${c.admin_reply ? 'border-blue-100' : 'border-slate-100'}`}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${c.admin_reply ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
+                  {c.admin_reply ? '답변 완료' : '답변 대기 중'}
+                </span>
+                <span className="text-xs text-slate-400">{new Date(c.created_at).toLocaleDateString('ko-KR')}</span>
+              </div>
+              <p className="font-black text-slate-900">{c.child_name} ({c.child_grade})</p>
+              {c.message && <p className="text-sm text-slate-500 mt-2 bg-slate-50 p-3 rounded-xl">{c.message}</p>}
+              {c.admin_reply ? (
+                <div className="mt-4 bg-blue-50 rounded-xl p-4 border border-blue-100">
+                  <p className="text-xs font-bold text-blue-600 mb-1">✉️ 원장님 답변</p>
+                  <p className="text-sm text-slate-700">{c.admin_reply}</p>
+                  <p className="text-xs text-slate-400 mt-1">{c.replied_at && new Date(c.replied_at).toLocaleDateString('ko-KR')}</p>
+                </div>
+              ) : (
+                <div className="mt-4 bg-slate-50 rounded-xl p-4 border border-slate-100">
+                  <p className="text-sm text-slate-400">아직 답변이 작성되지 않았습니다. 조금만 기다려주세요!</p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+</file>
+
+<file path="components/profile/AdminProfile.tsx">
+import Link from 'next/link';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
+import Image from 'next/image';
+
+type Consultation = {
+  id: string;
+  created_at: string;
+  parent_name: string;
+  child_name: string;
+  child_grade: string;
+  is_resolved: boolean;
+  message: string | null;
+  user_id: string | null;
+};
+
+type Profile = {
+  id: string;
+  nickname: string | null;
+  avatar_url: string | null;
+};
+
+export default async function AdminProfile({
+  userEmail,
+  consultations,
+}: {
+  userEmail: string;
+  consultations: Consultation[];
+}) {
+  const cookieStore = await cookies();
+
+  // 일반 클라이언트 (profiles 조회용)
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: { getAll() { return cookieStore.getAll(); } } }
+  );
+
+  // 서비스롤 클라이언트 (유저 목록용)
+  const adminSupabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { cookies: { getAll() { return cookieStore.getAll(); } } }
+  );
+
+  const { data: { users } } = await adminSupabase.auth.admin.listUsers();
+
+  // profiles 테이블에서 닉네임 + 아바타 가져오기
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, nickname, avatar_url');
+
+  // id → profile 맵
+  const profileMap: Record<string, Profile> = {};
+  profiles?.forEach(p => { profileMap[p.id] = p; });
+
+  // 유저 이메일 맵 (user_id → email)
+  const userEmailMap: Record<string, string> = {};
+  users?.forEach(u => { if (u.email) userEmailMap[u.id] = u.email; });
+
+  return (
+    <div className="max-w-4xl mx-auto py-20 px-6 space-y-8">
+
+      {/* 헤더 */}
+      <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/60 p-8 border border-slate-100">
+        <div className="flex items-center gap-4 mb-6">
+          <span className="bg-red-100 text-red-600 px-4 py-1.5 rounded-full text-sm font-black">관리자 권한</span>
+          <h1 className="text-2xl font-black text-slate-900">Admin Dashboard</h1>
+        </div>
+        <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100">
+          <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">관리자 계정</p>
+          <p className="font-bold text-slate-900">{userEmail}</p>
+        </div>
+      </div>
+
+      {/* 요약 카드 */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm text-center">
+          <p className="text-3xl font-black text-slate-900">{users?.length ?? 0}</p>
+          <p className="text-sm text-slate-500 mt-1">전체 회원</p>
+        </div>
+        <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm text-center">
+          <p className="text-3xl font-black text-slate-900">{consultations.length}</p>
+          <p className="text-sm text-slate-500 mt-1">전체 상담</p>
+        </div>
+        <div className="bg-red-50 rounded-2xl p-6 border border-red-100 shadow-sm text-center">
+          <p className="text-3xl font-black text-red-500">{consultations.filter(c => !c.is_resolved).length}</p>
+          <p className="text-sm text-slate-500 mt-1">미처리</p>
+        </div>
+        <div className="bg-blue-50 rounded-2xl p-6 border border-blue-100 shadow-sm text-center">
+          <p className="text-3xl font-black text-blue-600">{consultations.filter(c => c.is_resolved).length}</p>
+          <p className="text-sm text-slate-500 mt-1">처리 완료</p>
+        </div>
+      </div>
+
+      {/* 회원 목록 */}
+      <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/60 p-8 border border-slate-100">
+        <h2 className="text-xl font-black text-slate-900 mb-6">👥 가입 회원 목록</h2>
+        {!users || users.length === 0 ? (
+          <p className="text-slate-400 text-center py-8">가입한 회원이 없습니다.</p>
+        ) : (
+          <div className="space-y-3">
+            {users.map(u => {
+              const profile = profileMap[u.id];
+              return (
+                <div key={u.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="flex items-center gap-4">
+                    {/* 아바타 */}
+                    <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center shrink-0">
+                      {profile?.avatar_url ? (
+                        <Image src={profile.avatar_url} alt="avatar" width={40} height={40} className="object-cover w-full h-full" />
+                      ) : (
+                        <span className="text-lg">👤</span>
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-900">
+                        {profile?.nickname ?? '닉네임 없음'}
+                        <span className="text-slate-400 font-normal text-sm ml-2">— {u.email}</span>
+                      </p>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        가입일: {new Date(u.created_at).toLocaleDateString('ko-KR')}
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`text-xs font-bold px-3 py-1 rounded-full shrink-0 ${u.email_confirmed_at ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400'}`}>
+                    {u.email_confirmed_at ? '인증 완료' : '미인증'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* 최근 상담 신청 */}
+      <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/60 p-8 border border-slate-100">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-black text-slate-900">📋 최근 상담 신청</h2>
+          <Link href="/admin/consultations" className="text-sm font-bold text-blue-600 hover:underline">
+            전체 보기 →
+          </Link>
+        </div>
+        {consultations.length === 0 ? (
+          <p className="text-slate-400 text-center py-8">아직 상담 신청이 없습니다.</p>
+        ) : (
+          <div className="space-y-3">
+            {consultations.slice(0, 5).map(c => {
+              const profile = c.user_id ? profileMap[c.user_id] : null;
+              const email = c.user_id ? userEmailMap[c.user_id] : null;
+              return (
+                <div key={c.id} className={`p-5 rounded-2xl border ${c.is_resolved ? 'border-slate-100 bg-white' : 'border-red-100 bg-red-50'}`}>
+                  {/* 유저 정보 */}
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center shrink-0">
+                      {profile?.avatar_url ? (
+                        <Image src={profile.avatar_url} alt="avatar" width={32} height={32} className="object-cover w-full h-full" />
+                      ) : (
+                        <span className="text-sm">👤</span>
+                      )}
+                    </div>
+                    <p className="text-sm font-bold text-slate-700">
+                      {profile?.nickname ?? '닉네임 없음'}
+                      {email && <span className="text-slate-400 font-normal ml-1">— {email}</span>}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full mr-2 ${c.is_resolved ? 'bg-blue-100 text-blue-600' : 'bg-red-100 text-red-500'}`}>
+                        {c.is_resolved ? '처리 완료' : '미처리'}
+                      </span>
+                      <span className="text-xs text-slate-400">{new Date(c.created_at).toLocaleDateString('ko-KR')}</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-2 text-sm text-slate-600 space-y-0.5">
+                    <p><span className="font-bold text-slate-700">학부모님 성함:</span> {c.parent_name}</p>
+                    <p><span className="font-bold text-slate-700">학생 이름:</span> {c.child_name} ({c.child_grade})</p>
+                  </div>
+
+                  {c.message && <p className="text-sm text-slate-500 mt-2 bg-slate-100 p-3 rounded-xl truncate">{c.message}</p>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+    </div>
+  );
+}
+</file>
+
+<file path="components/profile/ProfileClient.tsx">
+'use client';
+
+import React, { useState, useRef } from 'react';
+import { supabase } from '@/lib/supabase/client';
+import Link from 'next/link';
+import Image from 'next/image';
+
+type Profile = {
+  id: string;
+  nickname: string | null;
+  avatar_url: string | null;
+};
+
+type Consultation = {
+  id: string;
+  created_at: string;
+  child_name: string;
+  child_grade: string;
+  message: string | null;
+  is_resolved: boolean;
+  admin_reply: string | null;
+  replied_at: string | null;
+};
+
+type Tab = 'profile' | 'consultations' | 'settings';
+
+export default function ProfileClient({
+  userEmail, userId, profile, consultations
+}: {
+  userEmail: string;
+  userId: string;
+  profile: Profile | null;
+  consultations: Consultation[];
+}) {
+  const [activeTab, setActiveTab] = useState<Tab>('profile');
+  const [nickname, setNickname] = useState(profile?.nickname ?? '');
+  const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url ?? '');
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+
+    const ext = file.name.split('.').pop();
+    const path = `${userId}/avatar.${ext}`;
+
+    const { error } = await supabase.storage
+      .from('avatars')
+      .upload(path, file, { upsert: true });
+
+    if (!error) {
+      const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+      const url = data.publicUrl + '?t=' + Date.now();
+      setAvatarUrl(url);
+      await supabase.from('profiles').upsert({ id: userId, avatar_url: url });
+    }
+    setUploading(false);
+  };
+
+  const handleSaveNickname = async () => {
+    setSaving(true);
+    await supabase.from('profiles').upsert({ id: userId, nickname });
+    setSaveMsg('저장됐어요!');
+    setSaving(false);
+    setTimeout(() => setSaveMsg(''), 2000);
+  };
+
+  const handleDeleteAccount = async () => {
+    await fetch('/auth/logout', { method: 'POST' });
+    window.location.href = '/';
+  };
+
+  const tabs: { id: Tab; label: string }[] = [
+    { id: 'profile', label: '내 프로필' },
+    { id: 'consultations', label: '상담 내역' },
+    { id: 'settings', label: '설정' },
+  ];
+
+  return (
+    <div className="max-w-3xl mx-auto py-20 px-6">
+      {/* 탭 */}
+      <div className="flex gap-2 mb-8 bg-white rounded-2xl p-2 border border-slate-100 shadow-sm">
+        {tabs.map(tab => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+            className={`flex-1 py-3 rounded-xl font-bold text-sm transition cursor-pointer ${
+              activeTab === tab.id
+                ? 'bg-slate-900 text-white shadow'
+                : 'text-slate-500 hover:text-slate-900'
+            }`}>
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/60 p-8 md:p-10 border border-slate-100">
+
+        {/* 내 프로필 탭 */}
+        {activeTab === 'profile' && (
+          <div>
+            <div className="flex items-center gap-4 mb-8">
+              <span className="bg-blue-100 text-blue-600 px-4 py-1.5 rounded-full text-sm font-black">일반 회원</span>
+              <h1 className="text-2xl font-black text-slate-900">내 프로필</h1>
+            </div>
+
+            {/* 아바타 */}
+            <div className="flex flex-col items-center mb-8">
+              <div
+                className="w-28 h-28 rounded-full border-4 border-slate-100 shadow-lg overflow-hidden bg-slate-100 flex items-center justify-center cursor-pointer hover:opacity-80 transition relative"
+                onClick={() => fileRef.current?.click()}
+              >
+                {avatarUrl ? (
+                  <Image src={avatarUrl} alt="프로필 사진" fill className="object-cover" />
+                ) : (
+                  <span className="text-4xl">👤</span>
+                )}
+                {uploading && (
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                    <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  </div>
+                )}
+              </div>
+              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+              <button onClick={() => fileRef.current?.click()}
+                className="mt-3 text-sm text-blue-600 font-bold hover:underline cursor-pointer">
+                사진 변경하기
+              </button>
+            </div>
+
+            {/* 이메일 */}
+            <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 mb-4">
+              <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">이메일</p>
+              <p className="font-bold text-slate-900">{userEmail}</p>
+            </div>
+
+            {/* 닉네임 */}
+            <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100">
+              <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">닉네임</p>
+              <div className="flex gap-2">
+                <input
+                  value={nickname}
+                  onChange={e => setNickname(e.target.value)}
+                  placeholder="닉네임을 입력해주세요"
+                  className="flex-1 px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
+                <button onClick={handleSaveNickname} disabled={saving}
+                  className="px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-blue-600 transition cursor-pointer disabled:opacity-50">
+                  {saving ? '저장 중...' : '저장'}
+                </button>
+              </div>
+              {saveMsg && <p className="text-blue-600 text-xs font-bold mt-2">{saveMsg}</p>}
+            </div>
+          </div>
+        )}
+
+        {/* 상담 내역 탭 */}
+        {activeTab === 'consultations' && (
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-black text-slate-900">📋 상담 신청 내역</h2>
+              <div className="flex gap-3">
+                <div className="text-center">
+                  <p className="text-2xl font-black text-slate-900">{consultations.length}</p>
+                  <p className="text-xs text-slate-400">전체</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-black text-blue-600">{consultations.filter(c => c.admin_reply).length}</p>
+                  <p className="text-xs text-slate-400">답변 완료</p>
+                </div>
+              </div>
+            </div>
+
+            {consultations.length === 0 ? (
+              <div className="bg-slate-50 rounded-2xl p-10 text-center border border-slate-100">
+                <p className="text-slate-400 mb-4">아직 상담 신청 내역이 없습니다.</p>
+                <Link href="/consultation" className="text-blue-600 font-bold hover:underline">
+                  상담 신청하러 가기 →
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {consultations.map(c => (
+                  <div key={c.id} className={`rounded-2xl p-6 border shadow-sm ${c.admin_reply ? 'border-blue-100 bg-blue-50/30' : 'border-slate-100 bg-white'}`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${c.admin_reply ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
+                        {c.admin_reply ? '답변 완료' : '답변 대기 중'}
+                      </span>
+                      <span className="text-xs text-slate-400">{new Date(c.created_at).toLocaleDateString('ko-KR')}</span>
+                    </div>
+                    <p className="font-black text-slate-900">{c.child_name} ({c.child_grade})</p>
+                    {c.message && <p className="text-sm text-slate-500 mt-2 bg-slate-50 p-3 rounded-xl">{c.message}</p>}
+                    {c.admin_reply ? (
+                      <div className="mt-3 bg-white rounded-xl p-4 border border-blue-100">
+                        <p className="text-xs font-bold text-blue-600 mb-1">✉️ 원장님 답변</p>
+                        <p className="text-sm text-slate-700">{c.admin_reply}</p>
+                        <p className="text-xs text-slate-400 mt-1">{new Date(c.replied_at!).toLocaleDateString('ko-KR')}</p>
+                      </div>
+                    ) : (
+                      <div className="mt-3 bg-slate-50 rounded-xl p-3 border border-slate-100">
+                        <p className="text-sm text-slate-400">아직 답변이 작성되지 않았습니다. 조금만 기다려주세요!</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 설정 탭 */}
+        {activeTab === 'settings' && (
+          <div>
+            <h2 className="text-2xl font-black text-slate-900 mb-8">⚙️ 설정</h2>
+
+            <div className="space-y-4">
+              {/* 비밀번호 변경 */}
+              <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100">
+                <h3 className="font-black text-slate-900 mb-1">비밀번호 변경</h3>
+                <p className="text-sm text-slate-500 mb-4">이메일로 비밀번호 재설정 링크를 받아요.</p>
+                <Link href="/find-password"
+                  className="inline-block px-5 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-blue-600 transition">
+                  비밀번호 변경하기
+                </Link>
+              </div>
+
+              {/* 닉네임 변경 */}
+              <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100">
+                <h3 className="font-black text-slate-900 mb-1">닉네임 변경</h3>
+                <p className="text-sm text-slate-500 mb-4">프로필에 표시될 닉네임을 변경해요.</p>
+                <div className="flex gap-2">
+                  <input
+                    value={nickname}
+                    onChange={e => setNickname(e.target.value)}
+                    placeholder="새 닉네임 입력"
+                    className="flex-1 px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+                  <button onClick={handleSaveNickname} disabled={saving}
+                    className="px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-blue-600 transition cursor-pointer disabled:opacity-50">
+                    {saving ? '저장 중...' : '저장'}
+                  </button>
+                </div>
+                {saveMsg && <p className="text-blue-600 text-xs font-bold mt-2">{saveMsg}</p>}
+              </div>
+
+              {/* 계정 삭제 */}
+              <div className="p-6 bg-red-50 rounded-2xl border border-red-100">
+                <h3 className="font-black text-red-600 mb-1">계정 삭제</h3>
+                <p className="text-sm text-slate-500 mb-4">계정을 삭제하면 모든 데이터가 사라지며 복구할 수 없어요.</p>
+                {!deleteConfirm ? (
+                  <button onClick={() => setDeleteConfirm(true)}
+                    className="px-5 py-2.5 bg-red-500 text-white rounded-xl text-sm font-bold hover:bg-red-600 transition cursor-pointer">
+                    계정 삭제하기
+                  </button>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-sm font-bold text-red-600">정말 삭제하시겠어요? 이 작업은 되돌릴 수 없어요.</p>
+                    <div className="flex gap-2">
+                      <button onClick={handleDeleteAccount}
+                        className="px-5 py-2.5 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700 transition cursor-pointer">
+                        네, 삭제할게요
+                      </button>
+                      <button onClick={() => setDeleteConfirm(false)}
+                        className="px-5 py-2.5 bg-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-300 transition cursor-pointer">
+                        취소
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="lib/hello.py">
+
+</file>
+
+<file path="proxy.ts">
+import { createServerClient } from '@supabase/ssr'
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
+
+export async function proxy(req: NextRequest) {
+  const res = NextResponse.next()
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return req.cookies.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            res.cookies.set(name, value, options)
+          )
+        },
+      },
+    }
+  )
+
+  await supabase.auth.getUser()
+
+  return res
+}
+</file>
+
+<file path=".gitignore">
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+</file>
+
+<file path="app/academy/page.tsx">
+'use client';
+
+import React from 'react';
+import Image from 'next/image';
+
+export default function AcademyAboutPage() {
+  return (
+    <div className="min-h-screen">
+      {/* 1. 페이지 헤더 (Hero) */}
+      <section className="pt-32 pb-20 bg-slate-900 text-white px-6">
+        <div className="max-w-6xl mx-auto">
+          <span className="text-blue-400 font-bold tracking-widest uppercase text-sm mb-4 block">About Us</span>
+          <h1 className="text-4xl md:text-5xl font-black mb-6 leading-tight">
+            환경이 실력을 만들고,<br />
+            진심이 결과를 만듭니다.
+          </h1>
+          <p className="text-slate-400 text-lg max-w-2xl leading-relaxed">
+            디아크 잉글리시는 단순한 지식 전달을 넘어, 아이들이 영어라는 날개를 달고 
+            더 넓은 세상을 향해 나아갈 수 있는 든든한 방주가 되고자 합니다.
+          </p>
+        </div>
+      </section>
+
+      {/* 2. 원장님 인사말 (CEO Message) */}
+      <section className="py-24 px-6 bg-white">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-16">
+          <div className="flex-1 relative w-full aspect-[3/4] rounded-[2rem] overflow-hidden shadow-2xl">
+            {/* 원장님 사진 또는 학원 상징 이미지 */}
+            <Image 
+              src="/director.jpg"
+              alt="디아크 잉글리시 원장님" 
+              fill 
+              className="object-cover"
+              sizes="(max-width: 768px) 100vw, 50vw"
+            />
+          </div>
+          <div className="flex-1 space-y-6">
+            <h2 className="text-3xl font-black text-slate-900">
+              "영어가 아이의 <span className="text-blue-600">자신감</span>이 되는 순간까지"
+            </h2>
+            <div className="space-y-4 text-slate-700 leading-relaxed text-lg">
+              <p>
+                안녕하십니까, 디아크 잉글리시 원장입니다. 중계동에서 아이들을 가르치며 가장 안타까웠던 점은 영어를 '공부'로만 느껴 일찍 지쳐버리는 모습이었습니다.
+              </p>
+              <p>
+                저희는 아이들이 자연스럽게 말문을 열 수 있는 <strong>소수 정예 밀착 케어</strong>와 
+                <strong>몰입형 영어 환경</strong>을 고집합니다. 기초부터 탄탄하게, 그리고 즐겁게 배우는 영어가 진짜 실력이 됩니다.
+              </p>
+              <p className="font-bold text-slate-900 pt-4 text-xl">
+                디아크 잉글리시 원장 홍길동
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 3. 학원 핵심 가치 (Core Values) */}
+      <section className="py-24 px-6 bg-slate-50">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl font-black text-slate-900 mb-4">The Ark's Core Value</h2>
+            <p className="text-slate-500">디아크 잉글리시가 추구하는 세 가지 교육 원칙입니다.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {[
+              { title: "Personalized", desc: "아이마다 다른 학습 속도와 성향을 고려한 1:1 맞춤 커리큘럼", icon: "🎯" },
+              { title: "Immersive", desc: "원어민 강사진과 함께하는 자연스러운 영어 몰입 환경", icon: "🌐" },
+              { title: "Result-Oriented", desc: "학교 내신부터 수행평가까지 확실하게 잡는 결과 중심 교육", icon: "📈" }
+            ].map((value, idx) => (
+              <div key={idx} className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-xl transition duration-300">
+                <div className="text-4xl mb-6">{value.icon}</div>
+                <h3 className="text-xl font-bold text-slate-900 mb-3">{value.title}</h3>
+                <p className="text-slate-600 leading-relaxed">{value.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+</file>
+
+<file path="app/auth/logout/route.ts">
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
+import { NextResponse } from 'next/server';
+
+export async function POST(request: Request) {
+  const cookieStore = await cookies();
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
+
+  await supabase.auth.signOut();
+
+  const response = NextResponse.json({ success: true });
+
+  // sb- 로 시작하는 Supabase 쿠키 전부 강제 만료
+  cookieStore.getAll().forEach((cookie) => {
+    if (cookie.name.startsWith('sb-')) {
+      response.cookies.set(cookie.name, '', {
+        maxAge: 0,
+        path: '/',
+      });
+    }
+  });
+
+  return response;
+}
+</file>
+
+<file path="app/find-password/page.tsx">
+'use client';
+
+import React, { useState } from 'react';
+import Link from 'next/link';
+import { supabase } from '@/lib/supabase/client';
+
+export default function FindPasswordPage() {
+  const [email, setEmail] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSent, setIsSent] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setIsLoading(true);
+
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+
+    if (resetError) {
+      setError('이메일 발송에 실패했습니다. 다시 시도해주세요.');
+      setIsLoading(false);
+      return;
+    }
+
+    setIsSent(true);
+    setIsLoading(false);
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-6">
+      <div className="max-w-md w-full bg-white p-10 md:p-12 rounded-[2.5rem] shadow-xl border border-slate-100">
+        
+        {isSent ? (
+          // 이메일 발송 완료 화면
+          <div className="text-center">
+            <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
+              <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-black text-slate-900 mb-3">이메일을 확인해주세요</h2>
+            <p className="text-slate-500 leading-relaxed mb-2">
+              <span className="font-bold text-slate-900">{email}</span>으로
+            </p>
+            <p className="text-slate-500 leading-relaxed mb-8">
+              비밀번호 재설정 링크를 보내드렸어요.<br />
+              메일함을 확인해주세요.
+            </p>
+            <p className="text-sm text-slate-400 mb-8">
+              이메일이 오지 않으면 스팸함을 확인하거나<br />잠시 후 다시 시도해주세요.
+            </p>
+            <button
+              onClick={() => { setIsSent(false); setEmail(''); }}
+              className="text-blue-600 font-bold hover:underline text-sm"
+            >
+              다른 이메일로 다시 시도하기
+            </button>
+          </div>
+        ) : (
+          // 이메일 입력 화면
+          <>
+            <div className="text-center mb-10">
+              <Link href="/" className="text-3xl font-black text-slate-900 tracking-tighter inline-block mb-3">
+                THE ARK <span className="text-blue-600">ENGLISH</span>
+              </Link>
+              <h2 className="text-xl font-black text-slate-900 mt-4 mb-2">비밀번호 찾기</h2>
+              <p className="text-slate-500 text-sm leading-relaxed">
+                가입하신 이메일 주소를 입력하시면<br />
+                비밀번호 재설정 링크를 보내드려요.
+              </p>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {error && (
+                <div className="bg-red-50 text-red-600 text-sm p-4 rounded-xl border border-red-100 font-medium text-center">
+                  {error}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">이메일 주소</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  placeholder="가입하신 이메일을 입력해주세요"
+                  disabled={isLoading}
+                  className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className={`w-full py-5 rounded-2xl text-lg font-black transition-all duration-300 transform shadow-lg shadow-slate-200 ${
+                  isLoading
+                    ? 'bg-slate-400 cursor-not-allowed'
+                    : 'bg-slate-900 text-white hover:bg-blue-600 hover:-translate-y-1'
+                }`}
+              >
+                {isLoading ? '발송 중...' : '재설정 링크 보내기'}
+              </button>
+            </form>
+
+            <div className="text-center mt-8 pt-6 border-t border-slate-100">
+              <Link href="/login" className="text-blue-600 font-bold hover:underline text-sm">
+                ← 로그인으로 돌아가기
+              </Link>
+            </div>
+          </>
+        )}
+      </div>
+
+      <p className="text-center text-slate-400 text-xs mt-10">
+        © 2024 THE ARK ENGLISH. All rights reserved.
+      </p>
+    </div>
+  );
+}
+</file>
+
+<file path="app/globals.css">
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+</file>
+
+<file path="app/reset-password/page.tsx">
+'use client';
+
+import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase/client';
+
+export default function ResetPasswordPage() {
+  const router = useRouter();
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false); // 비밀번호 보기 상태
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false); // 확인용 보기 상태
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password !== confirmPassword) {
+      setError('비밀번호가 일치하지 않습니다.');
+      return;
+    }
+
+    setIsLoading(true);
+    const { error: updateError } = await supabase.auth.updateUser({
+      password: password
+    });
+
+    if (updateError) {
+      // 기본 메시지 설정
+      let errorMessage = '비밀번호 변경에 실패했습니다.';
+
+      // Supabase가 보내는 영어 문구에 따라 한글로 변환
+      if (updateError.message.includes('should be different')) {
+        errorMessage = '이전과 동일한 비밀번호는 사용할 수 없습니다.';
+      } else if (updateError.message.includes('at least 6 characters')) {
+        errorMessage = '비밀번호는 최소 6자 이상이어야 합니다.';
+      } else if (updateError.status === 401 || updateError.message.includes('session')) {
+        errorMessage = '인증 세션이 만료되었습니다. 다시 시도해주세요.';
+      }
+
+      setError(errorMessage);
+      setIsLoading(false);
+      return;
+    }
+
+    alert('비밀번호가 성공적으로 변경되었습니다. 다시 로그인해주세요.');
+    router.push('/login');
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-6">
+      <div className="max-w-md w-full bg-white p-10 rounded-[2.5rem] shadow-xl border border-slate-100">
+        <h2 className="text-2xl font-black text-slate-900 mb-6 text-center">새 비밀번호 설정</h2>
+        
+        <form onSubmit={handleReset} className="space-y-6">
+          {error && <div className="text-red-600 text-sm text-center bg-red-50 p-3 rounded-xl border border-red-100">{error}</div>}
+          
+          {/* 새 비밀번호 입력 */}
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-2">새 비밀번호</label>
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                placeholder="6자 이상 입력"
+                className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-blue-500 outline-none transition font-medium"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-xl grayscale hover:grayscale-0 transition"
+              >
+                {showPassword ? '🧐' : '🫣'}
+              </button>
+            </div>
+          </div>
+
+          {/* 비밀번호 확인 입력 */}
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-2">비밀번호 확인</label>
+            <div className="relative">
+              <input
+                type={showConfirmPassword ? "text" : "password"}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                placeholder="한 번 더 입력"
+                className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-blue-500 outline-none transition font-medium"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-xl grayscale hover:grayscale-0 transition"
+              >
+                {showConfirmPassword ? '🧐' : '🫣'}
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full py-5 rounded-2xl bg-slate-900 text-white font-black hover:bg-blue-600 transition-all shadow-lg shadow-slate-200 disabled:bg-slate-400"
+          >
+            {isLoading ? '변경 중...' : '비밀번호 변경하기'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="eslint.config.mjs">
+import { defineConfig, globalIgnores } from "eslint/config";
+import nextVitals from "eslint-config-next/core-web-vitals";
+import nextTs from "eslint-config-next/typescript";
+
+const eslintConfig = defineConfig([
+  ...nextVitals,
+  ...nextTs,
+  // Override default ignores of eslint-config-next.
+  globalIgnores([
+    // Default ignores of eslint-config-next:
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+  ]),
+]);
+
+export default eslintConfig;
+</file>
+
+<file path="next.config.ts">
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'artsmxtzahjsjclonrkh.supabase.co',
+        pathname: '/storage/v1/object/public/**',
+      },
+    ],
+  },
+};
+
+export default nextConfig;
+</file>
+
+<file path="postcss.config.mjs">
+const config = {
+  plugins: {
+    "@tailwindcss/postcss": {},
+  },
+};
+
+export default config;
+</file>
+
+<file path="app/consultation/page.tsx">
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase/client';
+import Link from 'next/link';
+
+export default function ConsultationPage() {
+  const router = useRouter();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [formData, setFormData] = useState({
+    parentName: '',
+    phoneNumber: '',
+    childName: '',
+    childGrade: '',
+    message: '',
+  });
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setIsLoggedIn(!!user);
+      setAuthChecked(true);
+    };
+    checkAuth();
+  }, []);
+
+  const formatPhoneNumber = (value: string) => {
+    if (!value) return value;
+    const phoneNumber = value.replace(/[^\d]/g, '');
+    const phoneNumberLength = phoneNumber.length;
+    if (phoneNumberLength <= 3) return phoneNumber;
+    if (phoneNumberLength <= 7) return `${phoneNumber.slice(0, 3)}-${phoneNumber.slice(3)}`;
+    return `${phoneNumber.slice(0, 3)}-${phoneNumber.slice(3, 7)}-${phoneNumber.slice(7, 11)}`;
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: name === 'phoneNumber' ? formatPhoneNumber(value) : value,
+    });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error } = await supabase.from('consultations').insert({
+        user_id: user?.id ?? null,
+        parent_name: formData.parentName,
+        child_name: formData.childName,
+        phone: formData.phoneNumber,
+        message: formData.message,
+        child_grade: formData.childGrade,
+      });
+      if (error) throw error;
+      alert(`${formData.parentName}님, 상담 신청이 정상적으로 접수되었습니다.\n빠른 시일 내에 연락드리겠습니다!`);
+      router.push('/');
+    } catch (error: any) {
+      alert('오류: ' + (error?.message || JSON.stringify(error)));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // 로그인 체크 전 빈 화면
+  if (!authChecked) return null;
+
+  // 비로그인 상태
+  if (!isLoggedIn) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center px-6">
+        <div className="bg-white rounded-3xl shadow-xl p-10 max-w-md w-full text-center border border-slate-100">
+          <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
+            <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-black text-slate-900 mb-3">로그인이 필요해요</h2>
+          <p className="text-slate-500 mb-8 leading-relaxed">
+            상담 신청은 회원만 이용할 수 있어요.<br />
+            로그인 후 이용해주세요.
+          </p>
+          <div className="flex flex-col gap-3">
+            <Link href="/login"
+              className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-lg hover:bg-blue-600 transition text-center">
+              로그인하러 가기
+            </Link>
+            <button onClick={() => router.back()}
+              className="w-full py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold text-lg hover:bg-slate-200 transition">
+              돌아가기
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 로그인 상태 - 정상 폼 표시
+  return (
+    <div className="min-h-screen bg-slate-50 pt-32 pb-20 px-6">
+      <div className="max-w-5xl mx-auto">
+        <div className="text-center mb-16">
+          <span className="text-blue-600 font-bold tracking-widest uppercase text-sm mb-4 block">Consultation</span>
+          <h1 className="text-4xl md:text-5xl font-black text-slate-900 mb-6">상담 신청하기</h1>
+          <p className="text-slate-600 text-lg">
+            아이의 영어 고민, 디아크 잉글리시가 함께 나누겠습니다.<br />
+            상담 신청을 남겨주시면 24시간 이내에 전문 상담 선생님이 연락드립니다.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-12 items-start">
+          <div className="lg:col-span-2 space-y-8">
+            <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
+              <h3 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+                <span className="text-blue-600">📞</span> 빠른 유선 상담
+              </h3>
+              <p className="text-3xl font-black text-slate-900 mb-2">02-123-4567</p>
+              <p className="text-slate-500 leading-relaxed">
+                평일 오후 1시 ~ 저녁 9시<br />
+                토요일 오전 10시 ~ 오후 4시<br />
+                (일요일 및 공휴일 휴무)
+              </p>
+            </div>
+
+            <div className="bg-blue-600 p-8 rounded-[2rem] text-white shadow-xl shadow-blue-200">
+              <h3 className="text-xl font-bold mb-4">입학 테스트 안내</h3>
+              <ul className="space-y-4 text-blue-50">
+                <li className="flex gap-3">
+                  <span className="bg-white/20 w-6 h-6 rounded-full flex items-center justify-center text-xs shrink-0">1</span>
+                  <span>상담 신청 접수 확인 및 일정 조율</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="bg-white/20 w-6 h-6 rounded-full flex items-center justify-center text-xs shrink-0">2</span>
+                  <span>학원 방문 및 레벨 테스트 진행 (약 40분)</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="bg-white/20 w-6 h-6 rounded-full flex items-center justify-center text-xs shrink-0">3</span>
+                  <span>테스트 결과 기반 1:1 맞춤 커리큘럼 설계</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="lg:col-span-3 bg-white p-10 md:p-12 rounded-[2.5rem] shadow-xl border border-slate-100">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">학부모님 성함</label>
+                  <input type="text" name="parentName" required placeholder="성함을 입력해주세요"
+                    className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                    onChange={handleChange} />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">연락처 (숫자만 입력)</label>
+                  <input type="tel" name="phoneNumber" required placeholder="010-0000-0000" maxLength={13} inputMode="numeric"
+                    value={formData.phoneNumber}
+                    className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                    onChange={handleChange} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">학생 이름</label>
+                  <input type="text" name="childName" required placeholder="아이 이름을 입력해주세요"
+                    className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                    onChange={handleChange} />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">학생 학년</label>
+                  <select name="childGrade" required value={formData.childGrade}
+                    className={`w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition ${formData.childGrade === '' ? 'text-slate-300' : 'text-slate-900'}`}
+                    onChange={handleChange}>
+                    <option value="">학년 선택</option>
+                    <option value="초1">초등학교 1학년</option>
+                    <option value="초2">초등학교 2학년</option>
+                    <option value="초3">초등학교 3학년</option>
+                    <option value="초4">초등학교 4학년</option>
+                    <option value="초5">초등학교 5학년</option>
+                    <option value="초6">초등학교 6학년</option>
+                    <option value="중1">중학교 1학년</option>
+                    <option value="중2">중학교 2학년</option>
+                    <option value="중3">중학교 3학년</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">궁금하신 점 (선택)</label>
+                <textarea name="message" rows={4}
+                  placeholder="예: 레벨 테스트 가능한 시간대나 아이의 현재 영어 학습 상태를 적어주세요."
+                  className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition resize-none"
+                  onChange={handleChange} />
+              </div>
+
+              <button type="submit" disabled={isSubmitting}
+                className={`w-full py-5 rounded-2xl text-xl font-black transition-all duration-300 transform shadow-lg shadow-slate-200 ${
+                  isSubmitting ? 'bg-slate-400 cursor-not-allowed' : 'bg-slate-900 text-white hover:bg-blue-600 hover:-translate-y-1'
+                }`}>
+                {isSubmitting ? '신청 접수 중...' : '상담 신청 완료하기'}
+              </button>
+
+              <p className="text-center text-slate-400 text-xs mt-4">
+                * 개인정보는 상담 목적으로만 사용되며 안전하게 보호됩니다.
+              </p>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="app/page.tsx">
+'use client';
+
+import React from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
+import { Swiper, SwiperSlide } from 'swiper/react';
+import { Autoplay, Pagination, Navigation } from 'swiper/modules';
+
+import 'swiper/css';
+import 'swiper/css/pagination';
+import 'swiper/css/navigation';
+
+export default function Home() {
+  const imageSizes = "(max-width: 768px) 100vw, 50vw";
+
+  return (
+    <div className="min-h-screen">
+      {/* Hero Section */}
+      <section className="py-24 px-6 bg-slate-50 text-center">
+        <span className="inline-block bg-blue-100 text-blue-700 px-4 py-1 rounded-full text-sm font-bold mb-6">
+          노원구 초·중등 영어 전문
+        </span>
+        <h1 className="text-4xl md:text-6xl font-black text-slate-900 leading-tight mb-6 break-keep">
+          결과로 증명하는 영어.<br />
+          <span className="text-blue-600">디아크 잉글리시</span>에서 시작하세요.
+        </h1>
+        <p className="text-lg text-slate-600 mb-10 max-w-2xl mx-auto">
+          단순한 암기가 아닙니다. 원어민 밀착 케어와 소수 정예 수업으로 
+          아이들의 말문이 트이는 최적의 환경을 제공합니다.
+        </p>
+        <div className="flex flex-col md:flex-row justify-center gap-4">
+          <button className="bg-slate-900 text-white px-10 py-4 rounded-xl text-lg font-bold hover:scale-105 transition">
+            지금 시작하기
+          </button>
+          <Link href="/level-test" className="bg-white border-2 text-slate-900 border-slate-200 px-10 py-4 rounded-xl text-lg font-bold hover:scale-105 hover:bg-slate-50 transition">
+            레벨 테스트 예약
+          </Link>
+        </div>
+      </section>
+
+      {/* 2. Visual Slider: 학원 분위기 노출 */}
+      <section className="py-20 bg-[#4a85d3] text-white overflow-hidden">
+        <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center gap-12">
+          <div className="flex-1">
+            <h2 className="text-3xl md:text-4xl font-bold mb-6">
+              아이들이 머물고 싶은<br />최적의 학습 공간
+            </h2>
+            <p className="text-blue-100 mb-8 leading-relaxed">
+              쾌적한 강의실과 100% 영어 환경을 통해<br />
+              자연스럽게 영어를 습득할 수 있도록 설계되었습니다.
+            </p>
+            <Link href="/academy" className="text-white font-bold border-b-2 border-white pb-1 hover:text-blue-200 hover:border-blue-200 transition">
+              공간 소개 더보기 →
+            </Link>
+          </div>
+
+          <div className="flex-1 w-full aspect-video rounded-3xl overflow-hidden shadow-2xl relative">
+            <Swiper
+              spaceBetween={0}
+              centeredSlides={true}
+              autoplay={{ delay: 3000, disableOnInteraction: false }}
+              pagination={{ clickable: true }}
+              navigation={true}
+              modules={[Autoplay, Pagination, Navigation]}
+              className="w-full h-full"
+            >
+              <SwiperSlide>
+                <Image src="/classroom_1.jpg" alt="강의실 전경 1" fill className="object-cover" sizes={imageSizes} priority />
+              </SwiperSlide>
+              <SwiperSlide>
+                <Image src="/classroom_2.jpg" alt="강의실 전경 2" fill className="object-cover" sizes={imageSizes} />
+              </SwiperSlide>
+              <SwiperSlide>
+                <Image src="/classroom_3.jpg" alt="강의실 전경 3" fill className="object-cover" sizes={imageSizes} />
+              </SwiperSlide>
+              <SwiperSlide>
+                <Image src="/classroom_4.jpg" alt="강의실 전경 4" fill className="object-cover" sizes={imageSizes} />
+              </SwiperSlide>
+              <SwiperSlide>
+                <Image src="/hallway_1.jpg" alt="복도 전경" fill className="object-cover" sizes={imageSizes} />
+              </SwiperSlide>
+            </Swiper>
+          </div>
+        </div>
+      </section>
+
+      {/* 3. CTA Section: 빠른 문의 유도 */}
+      <section className="py-20 px-6 bg-white text-center">
+        <div className="max-w-4xl text-slate-900 mx-auto bg-slate-50 rounded-3xl p-12 border border-slate-100">
+          <h2 className="text-3xl font-bold mb-4">지금 바로 상담받아보세요</h2>
+          <p className="text-slate-500 mb-8">아이의 현재 실력을 진단하고 딱 맞는 커리큘럼을 제안해 드립니다.</p>
+          <Link href="/consultation" className="bg-blue-600 text-white px-8 py-3 rounded-full font-bold hover:bg-blue-700 transition">
+            무료 상담 신청하기
+          </Link>
+        </div>
+      </section>
+      {/* 오시는 길 섹션 */}
+      <section id="location" className="py-24 px-6 bg-slate-50">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
+            <div>
+              <span className="text-blue-600 font-bold tracking-widest uppercase text-sm mb-2 block">Location</span>
+              <h2 className="text-3xl md:text-4xl font-black text-slate-900">오시는 길</h2>
+            </div>
+            <p className="text-slate-600 font-medium">
+              디아크 잉글리시는 중계동 은행사거리 중심에 위치해 있습니다.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* 지도 영역 (2컬럼 차지) */}
+            <div className="lg:col-span-2 relative group shadow-2xl rounded-[2rem] overflow-hidden border-8 border-white">
+              <div className="w-full h-full relative">
+                <Image 
+                  src="/Location_academy.png" 
+                  alt="디아크 잉글리시 위치 지도"
+                  fill
+                  className="object-cover group-hover:scale-105 transition duration-700"
+                  sizes="(max-width: 1024px) 100vw, 66vw"
+                />
+                {/* 지도 위 오버레이 버튼 */}
+                <div className="absolute inset-0 bg-slate-900/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[2px]">
+                  <a 
+                    href="https://naver.me/5eUcEVcg"
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="bg-white text-slate-900 px-8 py-4 rounded-2xl font-black shadow-2xl hover:bg-blue-600 hover:text-white transition transform hover:-translate-y-1"
+                  >
+                    네이버 지도로 길찾기
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            {/* 정보 카드 영역 (1컬럼 차지) */}
+            <div className="flex flex-col gap-6">
+              {/* 주소 및 연락처 카드 */}
+              <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 flex-1">
+                <div className="space-y-8">
+                  <div>
+                    <h3 className="text-xs font-black text-blue-600 uppercase tracking-widest mb-3">Address</h3>
+                    <p className="text-slate-900 font-bold leading-relaxed text-lg">
+                      서울특별시 노원구 한글비석로 245<br />
+                      유경데파트 5층
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <h3 className="text-xs font-black text-blue-600 uppercase tracking-widest mb-3">Contact</h3>
+                    <p className="text-2xl font-black text-slate-900">02-123-4567</p>
+                    <p className="text-sm text-slate-500 mt-2 font-medium">수업 중일 수 있으니 <span className="text-blue-600">문자</span>를 남겨주세요.</p>
+                  </div>
+
+                  <div className="pt-6 border-t border-slate-100">
+                    <h3 className="text-xs font-black text-blue-600 uppercase tracking-widest mb-3">Parking</h3>
+                    <p className="text-slate-700 font-medium text-sm">유경데파트 건물 내 지하 주차장 이용 가능 (무료 주차권 제공)</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 교통편 안내 카드 */}
+              <div className="bg-slate-900 p-8 rounded-[2rem] text-white shadow-xl">
+                <h3 className="text-xs font-black text-blue-400 uppercase tracking-widest mb-6">Transportation</h3>
+                <div className="space-y-4">
+                  <div className="flex items-start gap-4">
+                    <div className="bg-white/10 p-2 rounded-lg text-lg">🚌</div>
+                    <div>
+                      <p className="font-bold">버스 이용 시</p>
+                      <p className="text-slate-400 text-xs mt-1 leading-relaxed">은행사거리 또는 중계본동 주민센터 정류장 하차</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-4">
+                    <div className="bg-white/10 p-2 rounded-lg text-lg">🚇</div>
+                    <div>
+                      <p className="font-bold">지하철 이용 시</p>
+                      <p className="text-slate-400 text-xs mt-1 leading-relaxed">상계역(4호선) 혹은 중계역(7호선) 하차 후 버스 환승</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+</file>
+
+<file path="app/register/page.tsx">
+'use client';
+
+import React, { useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase/client';
+
+export default function RegisterPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    // 1. 비밀번호 일치 확인
+    if (password !== confirmPassword) {
+      setError('비밀번호가 일치하지 않습니다.');
+      return;
+    }
+
+    // 2. 비밀번호 길이 체크 (Supabase 기본 설정은 6자 이상)
+    if (password.length < 6) {
+      setError('비밀번호는 최소 6자 이상이어야 합니다.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      // 3. Supabase 회원가입 호출
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+
+      if (signUpError) {
+        setError(signUpError.message);
+        setIsLoading(false);
+        return;
+      }
+
+      // 이미 가입된 이메일 체크
+      if (data.user && data.user.identities?.length === 0) {
+        setError('이미 가입된 이메일입니다. 로그인 페이지로 이동해주세요.');
+        setIsLoading(false);
+        return;
+      }
+
+      if (data.user) {
+        alert('회원가입 신청이 완료되었습니다!\n이메일을 확인하여 가입을 승인해주세요.');
+        router.push('/login');
+      }
+    } catch (err) {
+      setError('회원가입 중 오류가 발생했습니다.');
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 pt-32 pb-20 px-6 flex flex-col items-center justify-center">
+      <div className="max-w-md w-full bg-white p-10 md:p-12 rounded-[2.5rem] shadow-xl border border-slate-100">
+        <div className="text-center mb-10">
+          <h2 className="text-3xl font-black text-slate-900 mb-2">회원가입</h2>
+          <p className="text-slate-500">디아크 잉글리시의 가족이 되어주세요.</p>
+        </div>
+
+        <form onSubmit={handleRegister} className="space-y-5">
+          {error && (
+            <div className="bg-red-50 text-red-600 text-sm p-4 rounded-xl border border-red-100 font-medium text-center">
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-2">이메일 주소</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              placeholder="example@email.com"
+              className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-2">비밀번호</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              placeholder="6자 이상 입력"
+              className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-2">비밀번호 확인</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              placeholder="비밀번호 다시 입력"
+              className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className={`w-full py-5 rounded-2xl text-lg font-black transition-all duration-300 transform shadow-lg ${
+              isLoading 
+                ? 'bg-slate-400 cursor-not-allowed' 
+                : 'bg-blue-600 text-white hover:bg-blue-700 hover:-translate-y-1 shadow-blue-100'
+            }`}
+          >
+            {isLoading ? '가입 처리 중...' : '가입하기'}
+          </button>
+        </form>
+
+        <div className="text-center mt-8 pt-6 border-t border-slate-100">
+          <p className="text-slate-600 mb-2">이미 계정이 있으신가요?</p>
+          <Link href="/login" className="text-blue-600 font-bold hover:underline">
+            로그인 하러가기 →
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="app/login/page.tsx">
+'use client';
+
+import React, { useState } from 'react';
+import { supabase } from '@/lib/supabase/client';
+import Link from 'next/link';
+
+export default function LoginPage() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  // 🔥 handleLogin 수정
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setIsLoading(true)
+
+    try {
+      const res = await fetch('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(data.error || '로그인 실패')
+        setIsLoading(false)
+        return
+      }
+
+      // 🔥 중요: 서버 다시 렌더링
+      window.location.href = '/'
+    } catch (err) {
+      setError('로그인 중 오류 발생')
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <div className="min-h-[80vh] flex items-center justify-center px-6">
+      <div className="max-w-md w-full bg-white rounded-3xl shadow-xl shadow-slate-200/60 p-10 border border-slate-100">
+        <div className="text-center mb-10">
+          <h1 className="text-3xl font-black text-slate-900 mb-3">다시 오셨군요!</h1>
+          <p className="text-slate-500 font-medium">서비스 이용을 위해 로그인해주세요.</p>
+        </div>
+
+        <form onSubmit={handleLogin} className="space-y-5">
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">이메일 주소</label>
+            <input
+              type="email"
+              placeholder="example@email.com"
+              className="w-full px-5 py-4 rounded-2xl bg-slate-50 border text-slate-700 placeholder:text-slate-300 border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all font-medium"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">비밀번호</label>
+            <input
+              type="password"
+              placeholder="••••••••"
+              className="w-full px-5 py-4 rounded-2xl bg-slate-50 border text-slate-700 placeholder:text-slate-300 border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all font-medium"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+
+          {error && (
+            <div className="bg-red-50 text-red-500 text-sm font-bold px-4 py-3 rounded-xl border border-red-100">
+              {error}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-lg hover:bg-blue-600 disabled:bg-slate-300 transition-all shadow-lg shadow-slate-200 active:scale-[0.98]"
+          >
+            {isLoading ? '로그인 중...' : '로그인하기'}
+          </button>
+        </form>
+
+        <div className="mt-8 pt-8 border-t border-slate-100 text-center">
+          <p className="text-slate-500 font-medium mb-4">아직 계정이 없으신가요?</p>
+          <Link href="/register" className="text-blue-600 font-bold hover:underline">
+            1초 만에 회원가입하기
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="app/profile/page.tsx">
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
+import { redirect } from 'next/navigation';
+import Link from 'next/link';
+import ProfileClient from '@/components/profile/ProfileClient';
+import AdminProfile from '@/components/profile/AdminProfile';
+
+export default async function ProfilePage() {
+  const cookieStore = await cookies();
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: { getAll() { return cookieStore.getAll(); } } }
+  );
+
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) redirect('/login');
+
+  const userEmail = session.user.email!;
+  const userId = session.user.id;
+  const isAdmin = userEmail === 'daniel3954@gmail.com';
+
+  // 프로필 가져오기
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .single();
+
+  // 상담 내역
+  const oneYearAgo = new Date();
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+  const { data: consultations } = await supabase
+    .from('consultations')
+    .select('*')
+    .gte('created_at', oneYearAgo.toISOString())
+    .order('created_at', { ascending: false });
+
+  if (isAdmin) {
+    return <AdminProfile userEmail={userEmail} consultations={consultations ?? []} />;
+  }
+
+  // 유저는 본인 상담만
+  const { data: myConsultations } = await supabase
+    .from('consultations')
+    .select('*')
+    .eq('user_id', userId)
+    .gte('created_at', oneYearAgo.toISOString())
+    .order('created_at', { ascending: false });
+
+  return (
+    <ProfileClient
+      userEmail={userEmail}
+      userId={userId}
+      profile={profile}
+      consultations={myConsultations ?? []}
+    />
+  );
+}
+</file>
+
+<file path="package.json">
+{
+  "name": "the-ark-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.10.2",
+    "@supabase/supabase-js": "^2.103.0",
+    "next": "16.2.3",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "swiper": "^12.1.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.3",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
+</file>
+
+<file path="app/layout.tsx">
+// app/layout.tsx
+import './globals.css';
+import Link from 'next/link';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
+import LogoutButton from '@/components/dashboard/LogoutButton';
+
+export const dynamic = 'force-dynamic';
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const cookieStore = await cookies();
+  
+  // app/layout.tsx 내부
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll(); },
+        // ✅ 이 setAll이 반드시 있어야 로그인이 유지됩니다.
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch (error) {
+            // 서버 컴포넌트 에러는 무시
+          }
+        },
+      },
+    }
+  );
+
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user;
+
+  return (
+    <html lang="ko" className="bg-slate-50">
+      <body className="antialiased font-sans text-slate-900 flex flex-col min-h-screen bg-slate-50">
+        <nav className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-slate-200 px-8 py-5 shadow-sm">
+          <div className="max-w-[1600px] mx-auto flex items-center justify-between">
+            <Link href="/" className="text-2xl font-black text-slate-900 tracking-tighter flex items-center gap-2">
+              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white text-sm font-bold">A</div>
+              <span>THE ARK <span className="text-blue-600">ENGLISH</span></span>
+            </Link>
+
+            <div className="flex items-center gap-8">
+              <div className="hidden md:flex items-center gap-8 font-bold text-[15px] text-slate-600 mr-4">
+                <Link href="/academy" className="hover:text-blue-600 transition">학원 소개</Link>
+                <Link href="/level-test" className="hover:text-blue-600 transition">레벨 테스트</Link>
+              </div>
+              <div className="hidden md:block h-4 w-[1px] bg-slate-200" />
+              
+              <div className="flex items-center gap-6 font-bold text-[15px]">
+                {user ? (
+                  <>
+                    <LogoutButton />
+                    <Link href="/profile" className="text-blue-600 hover:text-blue-800 transition">내 프로필</Link>
+                  </>
+                ) : (
+                  <>
+                    <Link href="/login" className="text-slate-500 hover:text-slate-900 transition">로그인</Link>
+                    <Link href="/register" className="text-slate-500 hover:text-slate-900 transition">회원가입</Link>
+                  </>
+                )}
+              </div>
+
+              <Link href="/consultation">
+                <button className="hidden sm:block bg-slate-900 text-white px-7 py-3 rounded-full text-[14px] font-black hover:bg-blue-600 transition shadow-lg shadow-slate-100 active:scale-95">
+                  빠른 상담 신청
+                </button>
+              </Link>
+            </div>
+          </div>
+        </nav>
+
+        <main className="flex-grow pt-24 bg-slate-50 relative z-0">
+          {children}
+        </main>
+      </body>
+    </html>
+  );
+}
+</file>
+
+</files>

@@ -50,6 +50,7 @@ app/consultation/page.tsx
 app/find-password/page.tsx
 app/globals.css
 app/layout.tsx
+app/level-test/[grade]/page.tsx
 app/level-test/page.tsx
 app/login/page.tsx
 app/page.tsx
@@ -62,7 +63,19 @@ components/dashboard/ParentDashboard.tsx
 components/profile/AdminProfile.tsx
 components/profile/ProfileClient.tsx
 eslint.config.mjs
-lib/hello.py
+lib/levelTests/a1.ts
+lib/levelTests/a2.ts
+lib/levelTests/a3.ts
+lib/levelTests/a4.ts
+lib/levelTests/a5.ts
+lib/levelTests/a6.ts
+lib/levelTests/b1.ts
+lib/levelTests/b2.ts
+lib/levelTests/b3.ts
+lib/levelTests/index.ts
+lib/levelTests/types.ts
+lib/supabase/client.ts
+lib/supabase/server.ts
 next.config.ts
 package.json
 postcss.config.mjs
@@ -73,10 +86,885 @@ public/classroom_3.jpg
 public/classroom_4.jpg
 public/hallway_1.jpg
 public/Location_academy.png
+tsconfig.json
 </directory_structure>
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="app/level-test/[grade]/page.tsx">
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase/client';
+import { getTest, GradeKey } from '@/lib/levelTests/index';
+import type { GradeTest } from '@/lib/levelTests/types';
+import Link from 'next/link';
+
+type Phase = 'disclaimer' | 'test' | 'result';
+type Section = 'reading1' | 'reading2' | 'grammar';
+
+export default function LevelTestGradePage() {
+  const params = useParams();
+  const router = useRouter();
+  const grade = (params.grade as string)?.toLowerCase() as GradeKey;
+
+  const [test, setTest] = useState<GradeTest | null>(null);
+  const [phase, setPhase] = useState<Phase>('disclaimer');
+  const [section, setSection] = useState<Section>('reading1');
+  const [answers, setAnswers] = useState<{ [id: number]: number }>({});
+  const [userId, setUserId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [readingScore, setReadingScore] = useState(0);
+  const [grammarScore, setGrammarScore] = useState(0);
+
+  useEffect(() => {
+    const init = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { router.push('/login'); return; }
+      setUserId(user.id);
+
+      const testData = await getTest(grade);
+      if (!testData) { router.push('/level-test'); return; }
+      setTest(testData);
+    };
+    init();
+  }, [grade]);
+
+  const handleAnswer = (questionId: number, optionIndex: number) => {
+    setAnswers(prev => ({ ...prev, [questionId]: optionIndex }));
+  };
+
+  const allAnswered = (questions: { id: number }[]) =>
+    questions.every(q => answers[q.id] !== undefined);
+
+  const handleSubmit = async () => {
+    if (!test || !userId) return;
+    setSaving(true);
+
+    const allReadingQuestions = [
+      ...test.reading.passage1.questions,
+      ...test.reading.passage2.questions,
+    ];
+    const allQuestions = [...allReadingQuestions, ...test.grammar];
+
+    const rScore = allReadingQuestions.filter(q => answers[q.id] === q.answer).length;
+    const gScore = test.grammar.filter(q => answers[q.id] === q.answer).length;
+
+    // 문제별 정답/오답 정보
+    const wrongQuestions = allQuestions
+      .filter(q => answers[q.id] !== q.answer)
+      .map(q => ({
+        id: q.id,
+        type: q.type,
+        question: q.question,
+        yourAnswer: q.options[answers[q.id]],
+        correctAnswer: q.options[q.answer],
+      }));
+
+    const answersData = allQuestions.map(q => ({
+      id: q.id,
+      type: q.type,
+      question: q.question,
+      yourAnswer: q.options[answers[q.id]] ?? '미응답',
+      correctAnswer: q.options[q.answer],
+      isCorrect: answers[q.id] === q.answer,
+    }));
+
+    setReadingScore(rScore);
+    setGrammarScore(gScore);
+
+    await supabase.from('level_test_results').insert({
+      user_id: userId,
+      grade: test.grade,
+      grade_label: test.gradeLabel,
+      reading_score: rScore,
+      grammar_score: gScore,
+      total_score: rScore + gScore,
+      total_questions: 20,
+      answers: answersData,
+      wrong_questions: wrongQuestions,
+    });
+
+    setSaving(false);
+    setPhase('result');
+  };
+
+  if (!test) return <div className="min-h-screen flex items-center justify-center text-slate-500">불러오는 중...</div>;
+
+  // ========================
+  // 1. 안내 화면
+  // ========================
+  if (phase === 'disclaimer') {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center px-6">
+        <div className="bg-white rounded-3xl shadow-xl p-10 max-w-lg w-full border border-slate-100">
+          <div className="text-center mb-8">
+            <div className="text-5xl mb-4">📋</div>
+            <h2 className="text-2xl font-black text-slate-900 mb-2">{test.gradeLabel} 레벨 테스트</h2>
+            <span className="bg-blue-100 text-blue-600 text-xs font-bold px-3 py-1 rounded-full">임시 온라인 테스트</span>
+          </div>
+
+          <div className="space-y-4 mb-8">
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
+              <p className="text-amber-800 font-bold text-sm mb-1">⚠️ 안내 사항</p>
+              <p className="text-amber-700 text-sm leading-relaxed">
+                이 테스트는 대략적인 영어 수준을 파악하기 위한 <strong>임시 온라인 테스트</strong>입니다.
+                정확한 레벨 측정을 위해서는 <strong>학원 방문 후 직접 테스트</strong>를 받으실 것을 권장드립니다.
+              </p>
+            </div>
+
+            <div className="bg-slate-50 rounded-2xl p-5 space-y-3">
+              <p className="font-black text-slate-900 text-sm">테스트 구성</p>
+              <div className="flex items-center gap-3">
+                <span className="bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-full">Reading</span>
+                <p className="text-sm text-slate-600">지문 2개 × 5문제 = 총 10문제</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="bg-slate-700 text-white text-xs font-bold px-3 py-1 rounded-full">Grammar</span>
+                <p className="text-sm text-slate-600">문법 문제 10문제</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="bg-green-600 text-white text-xs font-bold px-3 py-1 rounded-full">Total</span>
+                <p className="text-sm text-slate-600">총 20문제 / 약 15~20분 소요</p>
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setPhase('test')}
+            className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-lg hover:bg-blue-600 transition cursor-pointer"
+          >
+            확인했습니다. 테스트 시작하기! →
+          </button>
+
+          <div className="text-center mt-4">
+            <Link href="/level-test" className="text-sm text-slate-400 hover:text-slate-600 hover:underline">
+              ← 학년 선택으로 돌아가기
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ========================
+  // 2. 테스트 화면
+  // ========================
+  if (phase === 'test') {
+    const currentPassage = section === 'reading1'
+      ? test.reading.passage1
+      : section === 'reading2'
+      ? test.reading.passage2
+      : null;
+    const currentGrammar = section === 'grammar' ? test.grammar : null;
+    const currentQuestions = currentPassage?.questions ?? currentGrammar ?? [];
+
+    const sectionLabel = section === 'reading1'
+      ? 'Reading - Passage 1'
+      : section === 'reading2'
+      ? 'Reading - Passage 2'
+      : 'Grammar';
+
+    const sectionNumber = section === 'reading1' ? 1 : section === 'reading2' ? 2 : 3;
+
+    const handleNext = () => {
+      if (section === 'reading1') setSection('reading2');
+      else if (section === 'reading2') setSection('grammar');
+      else handleSubmit();
+    };
+
+    return (
+      <div className="min-h-screen bg-slate-50 py-12 px-6">
+        <div className="max-w-3xl mx-auto">
+
+          {/* 상단 진행 표시 */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-bold text-slate-500">{test.gradeLabel} 레벨 테스트</span>
+              <span className="text-sm font-bold text-blue-600">{sectionNumber} / 3 섹션</span>
+            </div>
+            <div className="flex gap-2">
+              {(['reading1', 'reading2', 'grammar'] as Section[]).map((s, i) => (
+                <div key={s} className={`h-2 flex-1 rounded-full transition-all ${
+                  s === section ? 'bg-blue-600' :
+                  (section === 'reading2' && s === 'reading1') || (section === 'grammar') ? 'bg-blue-300' :
+                  'bg-slate-200'
+                }`} />
+              ))}
+            </div>
+          </div>
+
+          {/* 섹션 헤더 */}
+          <div className="mb-6">
+            <span className={`inline-block text-white text-xs font-bold px-3 py-1 rounded-full mb-3 ${
+              section === 'grammar' ? 'bg-slate-700' : 'bg-blue-600'
+            }`}>
+              {sectionLabel}
+            </span>
+          </div>
+
+          {/* 지문 */}
+          {currentPassage && (
+            <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6 mb-6">
+              <p className="text-xs font-black text-blue-600 uppercase tracking-widest mb-3">Passage</p>
+              <p className="text-slate-800 leading-relaxed text-sm whitespace-pre-line">{currentPassage.passage}</p>
+            </div>
+          )}
+
+          {/* 문제 목록 */}
+          <div className="space-y-6">
+            {currentQuestions.map((q, qIdx) => (
+              <div key={q.id} className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+                <p className="font-black text-slate-900 mb-4">
+                  <span className="text-blue-600 mr-2">Q{q.id}.</span>
+                  {q.question}
+                </p>
+                <div className="space-y-2">
+                  {q.options.map((option, oIdx) => (
+                    <button
+                      key={oIdx}
+                      onClick={() => handleAnswer(q.id, oIdx)}
+                      className={`w-full text-left px-5 py-3 rounded-xl border-2 font-medium text-sm transition-all cursor-pointer ${
+                        answers[q.id] === oIdx
+                          ? 'border-blue-600 bg-blue-600 text-white'
+                          : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-blue-300 hover:bg-blue-50'
+                      }`}
+                    >
+                      <span className="font-black mr-2">{String.fromCharCode(65 + oIdx)}.</span>
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* 다음 버튼 */}
+          <div className="mt-8">
+            <button
+              onClick={handleNext}
+              disabled={!allAnswered(currentQuestions) || saving}
+              className={`w-full py-5 rounded-2xl text-xl font-black transition-all shadow-lg cursor-pointer ${
+                allAnswered(currentQuestions) && !saving
+                  ? 'bg-slate-900 text-white hover:bg-blue-600'
+                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+              }`}
+            >
+              {saving ? '저장 중...' :
+               !allAnswered(currentQuestions) ? '모든 문제에 답해주세요' :
+               section === 'grammar' ? '테스트 제출하기 →' : '다음 섹션으로 →'}
+            </button>
+          </div>
+
+        </div>
+      </div>
+    );
+  }
+
+  // ========================
+  // 3. 결과 화면
+  // ========================
+  return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-6 py-12">
+      <div className="max-w-lg w-full">
+        <div className="bg-white rounded-3xl shadow-xl p-10 border border-slate-100 text-center mb-6">
+          <div className="text-6xl mb-4">🎉</div>
+          <h2 className="text-2xl font-black text-slate-900 mb-1">테스트 완료!</h2>
+          <p className="text-slate-500 mb-8">{test.gradeLabel} 레벨 테스트 결과</p>
+
+          {/* 점수 카드 */}
+          <div className="grid grid-cols-3 gap-4 mb-8">
+            <div className="bg-blue-50 rounded-2xl p-5 border border-blue-100">
+              <p className="text-xs font-black text-blue-600 uppercase tracking-widest mb-2">Reading</p>
+              <p className="text-3xl font-black text-slate-900">{readingScore}</p>
+              <p className="text-xs text-slate-400 mt-1">/ 10</p>
+            </div>
+            <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200">
+              <p className="text-xs font-black text-slate-600 uppercase tracking-widest mb-2">Grammar</p>
+              <p className="text-3xl font-black text-slate-900">{grammarScore}</p>
+              <p className="text-xs text-slate-400 mt-1">/ 10</p>
+            </div>
+            <div className={`rounded-2xl p-5 border ${
+              readingScore + grammarScore >= 16 ? 'bg-green-50 border-green-200' :
+              readingScore + grammarScore >= 10 ? 'bg-amber-50 border-amber-200' :
+              'bg-red-50 border-red-200'
+            }`}>
+              <p className="text-xs font-black text-slate-600 uppercase tracking-widest mb-2">Total</p>
+              <p className={`text-3xl font-black ${
+                readingScore + grammarScore >= 16 ? 'text-green-600' :
+                readingScore + grammarScore >= 10 ? 'text-amber-600' :
+                'text-red-500'
+              }`}>{readingScore + grammarScore}</p>
+              <p className="text-xs text-slate-400 mt-1">/ 20</p>
+            </div>
+          </div>
+
+          {/* 코멘트 */}
+          <div className={`rounded-2xl p-5 mb-6 text-left ${
+            readingScore + grammarScore >= 16 ? 'bg-green-50 border border-green-200' :
+            readingScore + grammarScore >= 10 ? 'bg-amber-50 border amber-200' :
+            'bg-red-50 border border-red-100'
+          }`}>
+            <p className="font-black text-slate-900 mb-1">
+              {readingScore + grammarScore >= 16 ? '🌟 우수한 수준이에요!' :
+               readingScore + grammarScore >= 10 ? '📚 기초가 잡혀 있어요!' :
+               '💪 함께 실력을 키워봐요!'}
+            </p>
+            <p className="text-sm text-slate-600 leading-relaxed">
+              {readingScore + grammarScore >= 16
+                ? '현재 학년 수준에서 매우 우수한 실력을 보여주고 있어요. 더 높은 수준의 학습으로 도전해보세요!'
+                : readingScore + grammarScore >= 10
+                ? '기본적인 영어 실력을 갖추고 있어요. 꾸준한 연습으로 더욱 향상시킬 수 있어요!'
+                : '영어의 기초를 함께 다져봐요. 디아크 잉글리시의 맞춤형 커리큘럼이 도움이 될 거예요!'}
+            </p>
+          </div>
+
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-6">
+            <p className="text-amber-800 text-sm font-bold">⚠️ 이 결과는 임시 온라인 테스트 결과입니다.</p>
+            <p className="text-amber-700 text-xs mt-1">정확한 레벨 측정을 위해 학원 방문 테스트를 권장드립니다.</p>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <Link href="/consultation"
+            className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-lg hover:bg-blue-700 transition text-center">
+            상담 신청하러 가기 →
+          </Link>
+          <Link href="/profile"
+            className="w-full py-4 bg-white text-slate-700 rounded-2xl font-bold text-lg hover:bg-slate-50 transition text-center border border-slate-200">
+            내 테스트 결과 보기
+          </Link>
+          <Link href="/level-test"
+            className="w-full py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold text-lg hover:bg-slate-200 transition text-center">
+            다른 학년 테스트 해보기
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="lib/levelTests/a2.ts">
+import type { GradeTest } from './types';
+
+export const A2Test: GradeTest = {
+  grade: 'a2',
+  gradeLabel: '초등학교 2학년',
+  reading: {
+    passage1: {
+      passage: 
+      `Tom is a boy. He lives in Seoul. He has a sister. 
+      Her name is Jina. They play together every day.`,
+      questions: [
+        { id: 1, type: 'reading', question: 'Where does Tom live?', options: ['Busan', 'Seoul', 'Daegu', 'Incheon'], answer: 1 },
+        { id: 2, type: 'reading', question: "What is Tom's sister's name?", options: ['Mina', 'Sora', 'Jina', 'Yuna'], answer: 2 },
+        { id: 3, type: 'reading', question: 'How often do they play together?', options: ['Once a week', 'Every day', 'Sometimes', 'Never'], answer: 1 },
+        { id: 4, type: 'reading', question: 'Who is Jina?', options: ["Tom's friend", "Tom's mother", "Tom's sister", "Tom's teacher"], answer: 2 },
+        { id: 5, type: 'reading', question: 'Is Tom a girl?', options: ["Yes, he is", "No, he isn't", "Yes, she is", "No, she isn't"], answer: 1 },
+      ],
+    },
+    passage2: {
+      passage: 
+      `I wake up at 7 o'clock. I eat breakfast with my family. 
+      Then I go to school by bus. School starts at 9 o'clock.`,
+      questions: [
+        { id: 6, type: 'reading', question: 'What time does the writer wake up?', options: ["6 o'clock", "7 o'clock", "8 o'clock", "9 o'clock"], answer: 1 },
+        { id: 7, type: 'reading', question: 'How does the writer go to school?', options: ['By car', 'By subway', 'By bus', 'On foot'], answer: 2 },
+        { id: 8, type: 'reading', question: 'Who does the writer eat breakfast with?', options: ['Friends', 'Teacher', 'Family', 'Alone'], answer: 2 },
+        { id: 9, type: 'reading', question: 'What time does school start?', options: ["7 o'clock", "8 o'clock", "9 o'clock", "10 o'clock"], answer: 2 },
+        { id: 10, type: 'reading', question: 'What does the writer do after waking up?', options: ['Goes to school', 'Eats breakfast', 'Watches TV', 'Plays outside'], answer: 1 },
+      ],
+    },
+  },
+  grammar: [
+    { id: 11, type: 'grammar', question: 'I ___ breakfast every morning.', options: ['eat', 'eats', 'eating', 'ate'], answer: 0 },
+    { id: 12, type: 'grammar', question: 'She ___ to school by bus.', options: ['go', 'goes', 'going', 'went'], answer: 1 },
+    { id: 13, type: 'grammar', question: 'There ___ two cats on the sofa.', options: ['is', 'are', 'am', 'be'], answer: 1 },
+    { id: 14, type: 'grammar', question: '___ he like soccer?', options: ['Do', 'Does', 'Is', 'Are'], answer: 1 },
+    { id: 15, type: 'grammar', question: 'I ___ my homework after school.', options: ['does', 'do', 'doing', 'did'], answer: 1 },
+    { id: 16, type: 'grammar', question: 'This bag is ___. (나의 가방)', options: ['my', 'me', 'mine', 'I'], answer: 0 },
+    { id: 17, type: 'grammar', question: 'We ___ soccer in the park.', options: ['plays', 'play', 'playing', 'played'], answer: 1 },
+    { id: 18, type: 'grammar', question: 'The dog ___ very fast.', options: ['run', 'runs', 'running', 'ran'], answer: 1 },
+    { id: 19, type: 'grammar', question: '___ is your favorite color?', options: ['Who', 'Where', 'What', 'When'], answer: 2 },
+    { id: 20, type: 'grammar', question: 'I have ___ eraser. (에러이저 하나)', options: ['a', 'an', 'the', 'some'], answer: 1 },
+  ],
+};
+</file>
+
+<file path="lib/levelTests/a3.ts">
+import type { GradeTest } from './types';
+
+export const A3Test: GradeTest = {
+  grade: 'a3',
+  gradeLabel: '초등학교 3학년',
+  reading: {
+    passage1: {
+      passage: 
+      `Junho loves animals very much. 
+      He has a dog named Bori and two goldfish in a glass tank. 
+      Every morning before school, he feeds Bori and puts food in the fish tank. 
+      On weekends, he takes Bori to the park for a walk. 
+      Junho's dream is to become a vet so he can help sick animals.`,
+      questions: [
+        { id: 1, type: 'reading', question: 'What animals does Junho have?', options: ['A cat and a dog', 'A dog and two goldfish', 'Two dogs and a fish', 'A rabbit and goldfish'], answer: 1 },
+        { id: 2, type: 'reading', question: 'What does Junho do every morning before school?', options: ['He plays with Bori at the park', 'He feeds Bori and the fish', 'He cleans his room', 'He reads animal books'], answer: 1 },
+        { id: 3, type: 'reading', question: 'Where does Junho take Bori on weekends?', options: ['To the vet', 'To school', 'To the park', 'To the market'], answer: 2 },
+        { id: 4, type: 'reading', question: "What is Junho's dream job?", options: ['A doctor', 'A teacher', 'A vet', 'A zookeeper'], answer: 2 },
+        { id: 5, type: 'reading', question: "What is the dog's name?", options: ['Momo', 'Coco', 'Bori', 'Nabi'], answer: 2 },
+      ],
+    },
+    passage2: {
+      passage: 
+      `Last Sunday, Sumi's family visited Gyeongbokgung Palace in Seoul. 
+      They rented hanbok near the palace and wore them all day. 
+      Sumi and her younger brother took many photos in front of the palace gate. 
+      Inside, they watched a royal guard changing ceremony. 
+      Sumi thought the ceremony was very exciting. 
+      After that, they ate bibimbap at a traditional restaurant nearby.`,
+      questions: [
+        { id: 6, type: 'reading', question: "Where did Sumi's family go last Sunday?", options: ['Lotte World', 'Gyeongbokgung Palace', 'Namsan Tower', 'Everland'], answer: 1 },
+        { id: 7, type: 'reading', question: 'What did they wear?', options: ['School uniforms', 'Hanbok', 'Costumes', 'Sports clothes'], answer: 1 },
+        { id: 8, type: 'reading', question: 'What did they watch inside the palace?', options: ['A movie', 'A dance show', 'A royal guard changing ceremony', 'A concert'], answer: 2 },
+        { id: 9, type: 'reading', question: 'How did Sumi feel about the ceremony?', options: ['Boring', 'Scary', 'Exciting', 'Sad'], answer: 2 },
+        { id: 10, type: 'reading', question: 'What did they eat after visiting the palace?', options: ['Tteokbokki', 'Samgyeopsal', 'Bibimbap', 'Japchae'], answer: 2 },
+      ],
+    },
+  },
+  grammar: [
+    { id: 11, type: 'grammar', question: 'She ___ TV last night.', options: ['watch', 'watches', 'watched', 'watching'], answer: 2 },
+    { id: 12, type: 'grammar', question: '___ you like kimchi?', options: ['Are', 'Is', 'Do', 'Does'], answer: 2 },
+    { id: 13, type: 'grammar', question: 'My brother is ___ than me. (키가 더 크다)', options: ['tall', 'taller', 'tallest', 'more tall'], answer: 1 },
+    { id: 14, type: 'grammar', question: 'We ___ to Busan last summer.', options: ['go', 'goes', 'went', 'going'], answer: 2 },
+    { id: 15, type: 'grammar', question: "I ___ play outside. It's raining. (불가능)", options: ['can', "can't", 'will', 'am'], answer: 1 },
+    { id: 16, type: 'grammar', question: 'There ___ a lot of students in the classroom.', options: ['is', 'are', 'am', 'was'], answer: 1 },
+    { id: 17, type: 'grammar', question: 'The book is ___ the table. (위에)', options: ['under', 'behind', 'on', 'in'], answer: 2 },
+    { id: 18, type: 'grammar', question: '___ does your school start?', options: ['What', 'Where', 'When', 'Who'], answer: 2 },
+    { id: 19, type: 'grammar', question: 'I ___ like spicy food. (부정)', options: ['not', "don't", "doesn't", "isn't"], answer: 1 },
+    { id: 20, type: 'grammar', question: 'She ___ her homework before dinner every day.', options: ['finish', 'finishes', 'finished', 'finishing'], answer: 1 },
+  ],
+};
+</file>
+
+<file path="lib/levelTests/a4.ts">
+import type { GradeTest } from './types';
+
+export const A4Test: GradeTest = {
+  grade: 'a4',
+  gradeLabel: '초등학교 4학년',
+  reading: {
+    passage1: {
+      passage: 
+      `Korea is a country with four distinct seasons, and each season has its own special characteristics. 
+      Spring begins in March and brings warm weather and beautiful cherry blossoms. 
+      Many families visit parks to enjoy the flowers. Summer comes in June and is very hot and humid. 
+      Korean students have summer vacation in July and August, and many families go to the beach or the mountains to cool down. 
+      Fall arrives in September with cool, comfortable weather. The mountains turn red, orange, and yellow, and many people go hiking to enjoy the colorful leaves. Winter starts in December and can be very cold. 
+      It often snows in the northern parts of Korea. Many children love winter because they can play in the snow and enjoy activities like sledding. Each season brings different foods, festivals, and outdoor activities for Koreans to enjoy.`,
+      questions: [
+        { id: 1, type: 'reading', question: 'When does spring begin in Korea?', options: ['February', 'March', 'April', 'May'], answer: 1 },
+        { id: 2, type: 'reading', question: 'What do many families do in spring?', options: ['Go skiing', 'Visit parks to see cherry blossoms', 'Go to the beach', 'Go hiking'], answer: 1 },
+        { id: 3, type: 'reading', question: 'When do Korean students have summer vacation?', options: ['June and July', 'July and August', 'August and September', 'June and August'], answer: 1 },
+        { id: 4, type: 'reading', question: 'What happens to the mountains in fall?', options: ['They get covered in snow', 'They turn red, orange, and yellow', 'Cherry blossoms bloom', 'They become green'], answer: 1 },
+        { id: 5, type: 'reading', question: 'What do many children love about winter?', options: ['Going to the beach', 'Seeing cherry blossoms', 'Playing in the snow and sledding', 'Hiking in the mountains'], answer: 2 },
+      ],
+    },
+    passage2: {
+      passage: 
+      `Jiho is a fourth-grade student at Hanbit Elementary School in Daejeon. 
+      His favorite subject is science because he loves doing experiments. 
+      Last week, his science teacher, Mr. Park, taught the class about chemical reactions. 
+      Jiho and his partner Sora did an experiment using vinegar and baking soda. 
+      When they mixed the two substances together in a bottle, the mixture started to bubble and fizz rapidly. 
+      The bubbles overflowed from the bottle, and everyone in the class was surprised. 
+      Mr. Park explained that when vinegar and baking soda react, they produce carbon dioxide gas, which creates the bubbles. 
+      After the experiment, Jiho wrote a report about what he observed. 
+      His teacher was very impressed and gave him a gold star sticker. That evening, Jiho told his parents all about the experiment. 
+      He said he wants to become a scientist and discover new things for the world.`,
+      questions: [
+        { id: 6, type: 'reading', question: 'Where does Jiho go to school?', options: ['Seoul', 'Busan', 'Daejeon', 'Incheon'], answer: 2 },
+        { id: 7, type: 'reading', question: 'What did the class learn about last week?', options: ['Physics', 'Chemical reactions', 'Biology', 'Astronomy'], answer: 1 },
+        { id: 8, type: 'reading', question: 'What gas is produced when vinegar and baking soda react?', options: ['Oxygen', 'Hydrogen', 'Nitrogen', 'Carbon dioxide'], answer: 3 },
+        { id: 9, type: 'reading', question: "What did Mr. Park give Jiho as a reward?", options: ['A prize', 'A gold star sticker', 'Extra homework', 'A book'], answer: 1 },
+        { id: 10, type: 'reading', question: 'What does Jiho want to be in the future?', options: ['A teacher', 'A doctor', 'A scientist', 'An engineer'], answer: 2 },
+      ],
+    },
+  },
+  grammar: [
+    { id: 11, type: 'grammar', question: 'Korea has four ___ seasons.', options: ['distinct', 'distinction', 'distinctive', 'distinctly'], answer: 0 },
+    { id: 12, type: 'grammar', question: 'She ___ her report after the experiment.', options: ['write', 'writes', 'wrote', 'written'], answer: 2 },
+    { id: 13, type: 'grammar', question: 'The mountains ___ red and yellow in fall.', options: ['turn', 'turns', 'turned', 'turning'], answer: 0 },
+    { id: 14, type: 'grammar', question: 'Many families ___ to the beach last summer.', options: ['go', 'goes', 'gone', 'went'], answer: 3 },
+    { id: 15, type: 'grammar', question: 'This is the ___ experiment I have ever done. (최고의)', options: ['good', 'better', 'best', 'well'], answer: 2 },
+    { id: 16, type: 'grammar', question: '___ mixing the substances, the bubbles overflowed.', options: ['After', 'Before', 'During', 'While'], answer: 2 },
+    { id: 17, type: 'grammar', question: 'Jiho and Sora ___ the experiment together.', options: ['do', 'does', 'did', 'doing'], answer: 2 },
+    { id: 18, type: 'grammar', question: 'He wants to become a scientist ___ discover new things.', options: ['but', 'and', 'or', 'so'], answer: 1 },
+    { id: 19, type: 'grammar', question: 'The teacher was ___ impressed by his report.', options: ['very', 'much', 'too', 'so'], answer: 0 },
+    { id: 20, type: 'grammar', question: 'Carbon dioxide gas ___ when the two substances react.', options: ['produce', 'produces', 'is produced', 'producing'], answer: 2 },
+  ],
+};
+</file>
+
+<file path="lib/levelTests/a5.ts">
+import type { GradeTest } from './types';
+
+export const A5Test: GradeTest = {
+  grade: 'a5',
+  gradeLabel: '초등학교 5학년',
+  reading: {
+    passage1: {
+      passage: 
+      `The Han River is one of the most important rivers in South Korea. 
+      It flows through the heart of Seoul, the capital city, and has played a major role in Korean history and culture for thousands of years. In the past, the river was used for transportation and trade. 
+      Goods were carried by boat from one region to another. However, as Korea modernized rapidly during the 20th century, the Han River transformed significantly. 
+      Today, the Han River Park stretches along both sides of the river and is one of the most popular recreational areas in Seoul. 
+      On weekends, millions of citizens visit the park to ride bicycles, have picnics, play sports, and watch the sunset over the water. The park also hosts various cultural events and festivals throughout the year. 
+      During summer, outdoor swimming pools open along the river, and fireworks festivals light up the night sky. 
+      The Han River is not just a body of water — it is a symbol of Seoul's growth and the daily lives of its people.`,
+      questions: [
+        { id: 1, type: 'reading', question: 'What was the Han River used for in the past?', options: ['Swimming and fishing', 'Transportation and trade', 'Drinking water only', 'Military purposes'], answer: 1 },
+        { id: 2, type: 'reading', question: 'Where is the Han River located?', options: ['Busan', 'Incheon', 'Seoul', 'Daegu'], answer: 2 },
+        { id: 3, type: 'reading', question: 'What do citizens do at Han River Park on weekends?', options: ['Only swim', 'Ride bicycles, have picnics, and watch the sunset', 'Go fishing only', 'Attend school events'], answer: 1 },
+        { id: 4, type: 'reading', question: 'What opens along the river during summer?', options: ['Ice skating rinks', 'Outdoor swimming pools', 'Amusement parks', 'Night markets'], answer: 1 },
+        { id: 5, type: 'reading', question: 'What does the Han River symbolize according to the passage?', options: ["Korea's military power", "Seoul's growth and people's daily lives", 'Ancient Korean trade routes', 'Modern Korean technology'], answer: 1 },
+      ],
+    },
+    passage2: {
+      passage: 
+      `Plastic pollution has become one of the most serious environmental problems in the world today. 
+      Every year, millions of tons of plastic waste are produced globally, and a large portion of it ends up in the ocean. 
+      Scientists estimate that by 2050, there could be more plastic in the ocean than fish. 
+      Plastic is harmful to marine life because animals such as sea turtles, dolphins, and seabirds often mistake plastic bags and bottle caps for food. 
+      When they eat plastic, it can block their digestive systems and cause them to die. 
+      In South Korea, the government has taken steps to reduce plastic use. Since 2019, many coffee shops and restaurants have been banned from using single-use plastic cups inside their stores. 
+      Customers are encouraged to bring their own reusable cups and bags. Schools across the country have also started environmental education programs to teach students about the importance of reducing, reusing, and recycling. 
+      Young Koreans are increasingly becoming aware of their responsibility to protect the planet for future generations.`,
+      questions: [
+        { id: 6, type: 'reading', question: 'What do scientists estimate about the ocean by 2050?', options: ['Fish will disappear completely', 'There will be more plastic than fish', 'The ocean will be clean', 'Plastic will dissolve in water'], answer: 1 },
+        { id: 7, type: 'reading', question: 'Why is plastic harmful to marine animals?', options: ['It makes the water too cold', 'Animals mistake it for food and it blocks their digestion', 'It reduces sunlight in the water', 'It makes the water smell bad'], answer: 1 },
+        { id: 8, type: 'reading', question: 'What did South Korea ban in coffee shops since 2019?', options: ['Paper cups', 'Single-use plastic cups inside stores', 'Plastic straws only', 'All plastic items'], answer: 1 },
+        { id: 9, type: 'reading', question: 'What are Korean schools teaching students about?', options: ['How to make plastic products', 'The importance of reducing, reusing, and recycling', 'Marine biology only', 'Government environmental policies'], answer: 1 },
+        { id: 10, type: 'reading', question: 'What is the main topic of this passage?', options: ['Ocean fishing in Korea', 'Plastic pollution and efforts to reduce it', 'Korean government policies', 'Marine animals in Korea'], answer: 1 },
+      ],
+    },
+  },
+  grammar: [
+    { id: 11, type: 'grammar', question: 'Plastic pollution ___ one of the most serious problems today.', options: ['am', 'is', 'are', 'were'], answer: 1 },
+    { id: 12, type: 'grammar', question: 'By 2050, there ___ more plastic in the ocean than fish.', options: ['is', 'was', 'could be', 'have been'], answer: 2 },
+    { id: 13, type: 'grammar', question: 'Animals often mistake plastic bags ___ food.', options: ['as', 'for', 'with', 'to'], answer: 1 },
+    { id: 14, type: 'grammar', question: 'The government has ___ steps to reduce plastic use.', options: ['take', 'takes', 'taken', 'took'], answer: 2 },
+    { id: 15, type: 'grammar', question: 'Customers are encouraged ___ their own reusable cups.', options: ['bring', 'brings', 'to bring', 'bringing'], answer: 2 },
+    { id: 16, type: 'grammar', question: 'The Han River ___ through the heart of Seoul.', options: ['flow', 'flows', 'flowed', 'flowing'], answer: 1 },
+    { id: 17, type: 'grammar', question: 'Millions of citizens ___ the park every weekend.', options: ['visit', 'visits', 'visited', 'visiting'], answer: 0 },
+    { id: 18, type: 'grammar', question: 'Schools ___ environmental programs since last year.', options: ['start', 'started', 'have started', 'starting'], answer: 2 },
+    { id: 19, type: 'grammar', question: 'If we ___ more careful, the environment will improve.', options: ['are', 'were', 'be', 'is'], answer: 0 },
+    { id: 20, type: 'grammar', question: 'Young Koreans are ___ aware of their responsibility.', options: ['increase', 'increased', 'increasingly', 'increasing'], answer: 2 },
+  ],
+};
+</file>
+
+<file path="lib/levelTests/a6.ts">
+import type { GradeTest } from './types';
+
+export const A6Test: GradeTest = {
+  grade: 'a6',
+  gradeLabel: '초등학교 6학년',
+  reading: {
+    passage1: {
+      passage: 
+      `Sejong the Great was one of the most celebrated kings in Korean history. 
+      He ruled the Joseon Dynasty from 1418 to 1450 and made enormous contributions to Korean culture, science, and language. 
+      His most famous achievement was the creation of Hangul, the Korean alphabet, in 1443. 
+      Before Hangul was invented, most Koreans could not read or write because the only writing system available was Chinese characters, which were extremely difficult to learn. 
+      Sejong believed that every person, regardless of social class, deserved the ability to read and write. 
+      He gathered a group of brilliant scholars called the Hall of Worthies to help develop the new alphabet. 
+      Hangul was designed to be simple and logical, with characters that represent the sounds of the Korean language. 
+      Today, Hangul is recognized worldwide as one of the most scientifically designed writing systems ever created. 
+      In addition to Hangul, King Sejong also supported the development of scientific inventions such as the rain gauge, the water clock, and sundials. 
+      His legacy continues to inspire Koreans, and his portrait appears on the 10,000 won banknote.`,
+      questions: [
+        { id: 1, type: 'reading', question: 'What is King Sejong most famous for?', options: ['Building palaces', 'Creating Hangul', 'Winning wars', 'Trading with China'], answer: 1 },
+        { id: 2, type: 'reading', question: 'Why could most Koreans not read before Hangul?', options: ['They had no schools', 'Chinese characters were too difficult to learn', 'Books were too expensive', 'The king banned reading'], answer: 1 },
+        { id: 3, type: 'reading', question: 'What was the Hall of Worthies?', options: ['A royal palace', 'A group of brilliant scholars', 'A library', 'A government office'], answer: 1 },
+        { id: 4, type: 'reading', question: 'Which scientific invention is NOT mentioned in the passage?', options: ['Rain gauge', 'Water clock', 'Telescope', 'Sundials'], answer: 2 },
+        { id: 5, type: 'reading', question: 'Where can you find King Sejong\'s portrait today?', options: ['The 1,000 won note', 'The 5,000 won note', 'The 10,000 won note', 'The 50,000 won note'], answer: 2 },
+      ],
+    },
+    passage2: {
+      passage: 
+      `South Korea is widely known for its remarkable economic transformation, often referred to as the "Miracle on the Han River." 
+      After the Korean War ended in 1953, South Korea was one of the poorest countries in the world. 
+      The country had very few natural resources and its infrastructure had been almost completely destroyed by the war. 
+      However, within just a few decades, South Korea transformed itself into one of the world's leading economies. 
+      This rapid growth was driven by strong government investment in education and industry, as well as the hard work of the Korean people. 
+      Companies like Samsung, Hyundai, and LG grew from small businesses into global corporations that are recognized around the world. 
+      Today, South Korea is the world's 12th largest economy and is a major exporter of electronics, automobiles, and cultural products. 
+      Korean pop music, known as K-pop, and Korean dramas have spread Korean culture to every corner of the globe in what is called the "Korean Wave" or Hallyu. 
+      Young people from countries across Asia, Europe, and the Americas are learning the Korean language and visiting Korea as tourists. 
+      South Korea's story is one of the most inspiring examples of national development in modern history.`,
+      questions: [
+        { id: 6, type: 'reading', question: 'What does "Miracle on the Han River" refer to?', options: ["Korea's military victories", "Korea's rapid economic growth", "Korea's cultural exports", "Korea's scientific discoveries"], answer: 1 },
+        { id: 7, type: 'reading', question: 'What was South Korea like after the Korean War?', options: ['One of the richest countries', 'One of the poorest countries', 'A powerful military nation', 'A major trading country'], answer: 1 },
+        { id: 8, type: 'reading', question: 'Which of the following is NOT mentioned as a Korean global company?', options: ['Samsung', 'Hyundai', 'Sony', 'LG'], answer: 2 },
+        { id: 9, type: 'reading', question: 'What is "Hallyu"?', options: ['A Korean food festival', 'The Korean Wave of culture spreading globally', 'A Korean economic policy', 'A type of Korean music instrument'], answer: 1 },
+        { id: 10, type: 'reading', question: 'What is South Korea\'s rank in the world economy?', options: ['5th largest', '8th largest', '10th largest', '12th largest'], answer: 3 },
+      ],
+    },
+  },
+  grammar: [
+    { id: 11, type: 'grammar', question: 'Hangul ___ in 1443 by King Sejong.', options: ['created', 'was created', 'has created', 'is creating'], answer: 1 },
+    { id: 12, type: 'grammar', question: 'South Korea ___ from a poor country into a leading economy.', options: ['transform', 'transforms', 'transformed', 'transforming'], answer: 2 },
+    { id: 13, type: 'grammar', question: 'K-pop ___ all over the world in recent years.', options: ['spread', 'spreads', 'has spread', 'is spreading'], answer: 2 },
+    { id: 14, type: 'grammar', question: 'King Sejong believed that every person ___ the ability to read.', options: ['deserve', 'deserves', 'deserved', 'deserving'], answer: 2 },
+    { id: 15, type: 'grammar', question: 'The country ___ very few natural resources after the war.', options: ['has', 'had', 'have', 'having'], answer: 1 },
+    { id: 16, type: 'grammar', question: 'Korean dramas ___ popular among young people around the world.', options: ['become', 'becomes', 'have become', 'becoming'], answer: 2 },
+    { id: 17, type: 'grammar', question: 'If Korea ___ not invested in education, the economy would not have grown.', options: ['has', 'had', 'have', 'did'], answer: 1 },
+    { id: 18, type: 'grammar', question: 'Hangul is recognized ___ one of the most scientific writing systems.', options: ['as', 'for', 'by', 'with'], answer: 0 },
+    { id: 19, type: 'grammar', question: 'Young people ___ the Korean language since K-pop became popular.', options: ['learn', 'learned', 'have been learning', 'are learn'], answer: 2 },
+    { id: 20, type: 'grammar', question: 'South Korea\'s story is one of the most ___ examples of national development.', options: ['inspire', 'inspired', 'inspiring', 'inspiration'], answer: 2 },
+  ],
+};
+</file>
+
+<file path="lib/levelTests/b1.ts">
+import type { GradeTest } from './types';
+
+export const B1Test: GradeTest = {
+  grade: 'b1',
+  gradeLabel: '중학교 1학년',
+  reading: {
+    passage1: {
+      passage:
+      `Artificial intelligence, commonly known as AI, is rapidly changing the way we live and work. 
+      AI refers to computer systems that can perform tasks that normally require human intelligence, 
+      such as recognizing speech, making decisions, and translating languages. 
+      In South Korea, AI technology is being applied in many fields. 
+      Hospitals are using AI to analyze medical images and detect diseases like cancer at an early stage, 
+      which significantly improves the chances of successful treatment. 
+      In education, AI-powered programs can personalize learning by identifying each student's strengths and weaknesses 
+      and providing customized study plans. 
+      Major Korean companies such as Kakao and Naver have developed their own AI systems 
+      that power services like voice assistants, recommendation algorithms, and translation tools. 
+      However, AI also raises important concerns. 
+      Some people worry that AI will replace human workers in many industries, leading to unemployment. 
+      Others are concerned about privacy, as AI systems often collect and analyze large amounts of personal data. 
+      Despite these challenges, most experts agree that AI will continue to advance rapidly 
+      and that society must find ways to use it responsibly for the benefit of all people.`,
+      questions: [
+        { id: 1, type: 'reading', question: 'How are Korean hospitals using AI?', options: ['To replace doctors entirely', 'To analyze medical images and detect diseases early', 'To manage hospital finances', 'To communicate with patients'], answer: 1 },
+        { id: 2, type: 'reading', question: 'How does AI personalize education according to the passage?', options: ['By replacing teachers', 'By identifying strengths and weaknesses and providing customized plans', 'By grading all student tests', 'By creating new textbooks'], answer: 1 },
+        { id: 3, type: 'reading', question: 'Which Korean companies have developed their own AI systems?', options: ['Samsung and LG', 'Hyundai and Kia', 'Kakao and Naver', 'Lotte and SK'], answer: 2 },
+        { id: 4, type: 'reading', question: 'What is one concern people have about AI?', options: ['AI uses too much electricity', 'AI will replace human workers and cause unemployment', 'AI is too expensive to develop', 'AI cannot understand Korean'], answer: 1 },
+        { id: 5, type: 'reading', question: 'What do most experts agree about AI?', options: ['AI will stop advancing soon', 'AI is too dangerous to use', 'AI will continue to advance and must be used responsibly', 'AI should be banned in schools'], answer: 2 },
+      ],
+    },
+    passage2: {
+      passage:
+      `The issue of mental health among Korean teenagers has become a growing concern in recent years. 
+      South Korea has one of the most competitive education systems in the world, 
+      and students often face enormous pressure to achieve high scores on exams, 
+      particularly the College Scholastic Ability Test, known as the CSAT or Suneung. 
+      Many students study for more than 12 hours a day, attending regular school during the day 
+      and private tutoring academies, called hagwons, in the evening. 
+      This intense academic pressure has been linked to high levels of stress, anxiety, and depression among young people. 
+      According to a recent government survey, more than 30% of Korean middle and high school students 
+      reported feeling extreme stress related to their studies. 
+      In response, the Korean government has introduced policies to limit hagwon operating hours 
+      and promote a more balanced lifestyle for students. 
+      Schools are also beginning to offer mental health counseling services and mindfulness programs. 
+      Experts emphasize that academic success is important, but students also need time to rest, 
+      pursue hobbies, spend time with family and friends, and develop their emotional well-being. 
+      A healthy mind is just as important as good grades.`,
+      questions: [
+        { id: 6, type: 'reading', question: 'What is the CSAT (Suneung)?', options: ['A university entrance exam', 'A middle school placement test', 'A national sports competition', 'A government scholarship program'], answer: 0 },
+        { id: 7, type: 'reading', question: 'What are hagwons?', options: ['Public libraries', 'Private tutoring academies', 'Government study centers', 'School clubs'], answer: 1 },
+        { id: 8, type: 'reading', question: 'According to the survey, what percentage of students reported extreme stress?', options: ['More than 10%', 'More than 20%', 'More than 30%', 'More than 40%'], answer: 2 },
+        { id: 9, type: 'reading', question: 'What has the government done to help students?', options: ['Cancelled all exams', 'Limited hagwon hours and promoted balanced lifestyles', 'Reduced school hours to 4 hours a day', 'Made all education free'], answer: 1 },
+        { id: 10, type: 'reading', question: 'What is the main message of the passage?', options: ['Korean students should study harder', 'Mental health is just as important as academic success', 'Hagwons should be completely banned', 'Only grades determine a student\'s future'], answer: 1 },
+      ],
+    },
+  },
+  grammar: [
+    { id: 11, type: 'grammar', question: 'AI ___ tasks that normally require human intelligence.', options: ['perform', 'performs', 'can perform', 'performing'], answer: 2 },
+    { id: 12, type: 'grammar', question: 'Many students ___ for more than 12 hours a day.', options: ['study', 'studies', 'studied', 'are studying'], answer: 3 },
+    { id: 13, type: 'grammar', question: 'The government has introduced policies ___ hagwon operating hours.', options: ['limit', 'limiting', 'to limit', 'limited'], answer: 2 },
+    { id: 14, type: 'grammar', question: 'If students ___ enough rest, their mental health would improve.', options: ['get', 'got', 'gets', 'getting'], answer: 1 },
+    { id: 15, type: 'grammar', question: 'AI systems often collect data, ___ raises privacy concerns.', options: ['that', 'who', 'which', 'what'], answer: 2 },
+    { id: 16, type: 'grammar', question: 'Students need time to rest ___ pursue their hobbies.', options: ['but', 'or', 'and', 'so'], answer: 2 },
+    { id: 17, type: 'grammar', question: 'Mental health counseling services ___ in schools recently.', options: ['introduce', 'introduced', 'have been introduced', 'are introducing'], answer: 2 },
+    { id: 18, type: 'grammar', question: 'The pressure students face ___ linked to stress and anxiety.', options: ['is', 'are', 'was', 'been'], answer: 0 },
+    { id: 19, type: 'grammar', question: 'Experts emphasize that a healthy mind is just as important ___ good grades.', options: ['than', 'as', 'like', 'with'], answer: 1 },
+    { id: 20, type: 'grammar', question: 'AI technology ___ in many fields since it was developed.', options: ['applies', 'applied', 'has been applied', 'is apply'], answer: 2 },
+  ],
+};
+</file>
+
+<file path="lib/levelTests/b2.ts">
+import type { GradeTest } from './types';
+
+export const B2Test: GradeTest = {
+  grade: 'b2',
+  gradeLabel: '중학교 2학년',
+  reading: {
+    passage1: {
+      passage:
+      `Climate change is arguably the most pressing global challenge of the 21st century. 
+      The Earth's average temperature has risen by approximately 1.1 degrees Celsius since the pre-industrial era, 
+      primarily due to the burning of fossil fuels such as coal, oil, and natural gas. 
+      These activities release large quantities of greenhouse gases, particularly carbon dioxide and methane, 
+      into the atmosphere, trapping heat and causing the planet to warm. 
+      The consequences of this warming are already being felt around the world. 
+      Glaciers and polar ice caps are melting at an alarming rate, causing sea levels to rise 
+      and threatening low-lying coastal communities and island nations. 
+      Extreme weather events such as hurricanes, droughts, and wildfires have become more frequent and intense. 
+      In South Korea, climate change has led to longer and more intense heat waves during summer, 
+      heavier rainfall during the monsoon season, and disruptions to traditional agricultural patterns. 
+      The Korean government has committed to achieving carbon neutrality by 2050, 
+      meaning it aims to balance the amount of greenhouse gases emitted with the amount removed from the atmosphere. 
+      To achieve this goal, Korea is investing heavily in renewable energy sources such as solar and wind power, 
+      promoting electric vehicles, and implementing stricter regulations on industrial emissions. 
+      Scientists warn that without immediate and decisive global action, 
+      the consequences of climate change will become increasingly severe and potentially irreversible.`,
+      questions: [
+        { id: 1, type: 'reading', question: 'By how much has the Earth\'s average temperature risen since the pre-industrial era?', options: ['0.5 degrees Celsius', '1.1 degrees Celsius', '2.0 degrees Celsius', '3.5 degrees Celsius'], answer: 1 },
+        { id: 2, type: 'reading', question: 'What is the primary cause of climate change according to the passage?', options: ['Deforestation alone', 'Burning of fossil fuels', 'Ocean pollution', 'Nuclear energy use'], answer: 1 },
+        { id: 3, type: 'reading', question: 'What has climate change caused in South Korea specifically?', options: ['More snowfall in winter', 'Longer and more intense heat waves and heavier monsoon rainfall', 'Decreased agricultural production only', 'Rising coastal land'], answer: 1 },
+        { id: 4, type: 'reading', question: 'What does "carbon neutrality by 2050" mean for Korea?', options: ['Stop all industrial activity by 2050', 'Balance greenhouse gases emitted with those removed', 'Reduce carbon emissions by 50%', 'Ban all fossil fuels immediately'], answer: 1 },
+        { id: 5, type: 'reading', question: 'Which of the following is NOT mentioned as part of Korea\'s climate strategy?', options: ['Solar and wind power', 'Electric vehicles', 'Nuclear energy expansion', 'Stricter industrial emission regulations'], answer: 2 },
+      ],
+    },
+    passage2: {
+      passage:
+      `The concept of the "smart city" is transforming urban living across the globe, 
+      and South Korea is at the forefront of this technological revolution. 
+      A smart city uses digital technology and data to improve the efficiency of city services 
+      and enhance the quality of life for its residents. 
+      Songdo, located near Incheon, is often cited as one of the world's most advanced smart cities. 
+      Built largely from scratch on reclaimed land, Songdo was designed from the beginning 
+      to integrate cutting-edge technology into every aspect of urban life. 
+      The city features a pneumatic waste disposal system that transports garbage underground through tubes, 
+      eliminating the need for traditional garbage trucks. 
+      Sensors embedded throughout the city monitor traffic flow, air quality, and energy consumption in real time, 
+      allowing city administrators to respond quickly to any issues. 
+      Buildings in Songdo are connected to a central network that controls lighting, heating, and security systems. 
+      Residents can access city services, pay bills, and monitor their home energy usage through a single smart device. 
+      Furthermore, Songdo was designed with sustainability in mind — 
+      40% of the city's area is dedicated to parks and green spaces, 
+      and the city recycles approximately 75% of its waste. 
+      While Songdo represents an impressive vision of the future, 
+      critics argue that smart cities raise important questions about data privacy and surveillance, 
+      as the constant monitoring of residents generates enormous amounts of personal data.`,
+      questions: [
+        { id: 6, type: 'reading', question: 'Where is Songdo located?', options: ['Seoul', 'Busan', 'Near Incheon', 'Daejeon'], answer: 2 },
+        { id: 7, type: 'reading', question: 'How does Songdo\'s waste disposal system work?', options: ['Robots collect garbage', 'Garbage is transported underground through tubes', 'Residents must bring waste to recycling centers', 'Garbage trucks operate 24 hours'], answer: 1 },
+        { id: 8, type: 'reading', question: 'What percentage of Songdo\'s area is dedicated to parks and green spaces?', options: ['20%', '30%', '40%', '50%'], answer: 2 },
+        { id: 9, type: 'reading', question: 'What concern do critics raise about smart cities?', options: ['They are too expensive to build', 'They raise questions about data privacy and surveillance', 'They are not environmentally friendly', 'They are difficult to navigate'], answer: 1 },
+        { id: 10, type: 'reading', question: 'What can Songdo residents do through a single smart device?', options: ['Only pay bills', 'Access city services, pay bills, and monitor home energy usage', 'Control traffic lights', 'Communicate with city administrators only'], answer: 1 },
+      ],
+    },
+  },
+  grammar: [
+    { id: 11, type: 'grammar', question: 'The Earth\'s temperature ___ by 1.1 degrees since the pre-industrial era.', options: ['rises', 'has risen', 'rose', 'is rising'], answer: 1 },
+    { id: 12, type: 'grammar', question: 'Songdo ___ from scratch on reclaimed land near Incheon.', options: ['builds', 'built', 'was built', 'has built'], answer: 2 },
+    { id: 13, type: 'grammar', question: 'Without immediate action, the consequences ___ increasingly severe.', options: ['become', 'will become', 'became', 'have become'], answer: 1 },
+    { id: 14, type: 'grammar', question: 'Sensors ___ throughout the city monitor air quality and traffic in real time.', options: ['embed', 'embedded', 'embedding', 'are embed'], answer: 1 },
+    { id: 15, type: 'grammar', question: 'Korea is investing in renewable energy ___ achieve carbon neutrality.', options: ['for', 'so that', 'in order to', 'because'], answer: 2 },
+    { id: 16, type: 'grammar', question: 'Critics argue that smart cities raise questions ___ data privacy.', options: ['about', 'for', 'with', 'on'], answer: 0 },
+    { id: 17, type: 'grammar', question: 'The city recycles approximately 75% of ___ waste.', options: ['it', 'its', 'their', 'his'], answer: 1 },
+    { id: 18, type: 'grammar', question: 'Extreme weather events ___ more frequent due to climate change.', options: ['become', 'became', 'have become', 'are become'], answer: 2 },
+    { id: 19, type: 'grammar', question: '___ the constant monitoring, enormous amounts of personal data are generated.', options: ['Because of', 'Despite', 'Although', 'Unless'], answer: 0 },
+    { id: 20, type: 'grammar', question: 'If fossil fuels ___ replaced by renewable energy, emissions would decrease significantly.', options: ['are', 'were', 'will be', 'have been'], answer: 1 },
+  ],
+};
+</file>
+
+<file path="lib/levelTests/b3.ts">
+import type { GradeTest } from './types';
+
+export const B3Test: GradeTest = {
+  grade: 'b3',
+  gradeLabel: '중학교 3학년',
+  reading: {
+    passage1: {
+      passage:
+      `The rapid advancement of biotechnology is fundamentally reshaping our understanding of human health and medicine. 
+      Among the most groundbreaking developments is CRISPR-Cas9, a gene-editing technology 
+      that allows scientists to precisely modify DNA sequences within living organisms. 
+      Originally discovered as part of the immune defense system of bacteria, 
+      CRISPR has been adapted by researchers into a powerful tool for treating genetic diseases. 
+      In theory, CRISPR could be used to eliminate inherited disorders such as sickle cell anemia, 
+      cystic fibrosis, and certain forms of hereditary blindness by correcting faulty genes 
+      at the molecular level before symptoms even develop. 
+      South Korean research institutions, including Seoul National University and KAIST, 
+      have been actively involved in CRISPR research and have published significant findings 
+      in international scientific journals. 
+      However, the technology is not without controversy. 
+      In 2018, a Chinese scientist named He Jiankui shocked the world by claiming to have created 
+      the first gene-edited human babies, bypassing established ethical guidelines. 
+      This event ignited fierce global debate about the boundaries of genetic engineering. 
+      Critics warn that unregulated gene editing could lead to the creation of so-called "designer babies," 
+      where parents select traits such as intelligence, physical appearance, or athletic ability for their children. 
+      Such possibilities raise profound ethical questions about equality, diversity, and what it means to be human. 
+      The scientific community largely agrees that while the potential benefits of CRISPR are immense, 
+      its application must be governed by strict international regulations and transparent ethical oversight 
+      to prevent misuse and ensure that its benefits are shared equitably across all societies.`,
+      questions: [
+        { id: 1, type: 'reading', question: 'What was CRISPR originally discovered as?', options: ['A cancer treatment', 'Part of bacteria\'s immune defense system', 'A genetic sequencing tool', 'A protein synthesis method'], answer: 1 },
+        { id: 2, type: 'reading', question: 'Which Korean institutions are mentioned as being involved in CRISPR research?', options: ['Yonsei University and Korea University', 'Seoul National University and KAIST', 'Sungkyunkwan University and POSTECH', 'Hanyang University and Ewha'], answer: 1 },
+        { id: 3, type: 'reading', question: 'What did He Jiankui claim to have done in 2018?', options: ['Cured cancer using CRISPR', 'Created the first gene-edited human babies', 'Discovered a new genetic disease', 'Developed a CRISPR vaccine'], answer: 1 },
+        { id: 4, type: 'reading', question: 'What are "designer babies" as referred to in the passage?', options: ['Babies born through IVF', 'Babies whose traits are selected through genetic engineering', 'Babies with naturally superior genes', 'Babies treated for genetic diseases after birth'], answer: 1 },
+        { id: 5, type: 'reading', question: 'What does the scientific community agree is necessary for CRISPR\'s application?', options: ['Complete freedom for researchers', 'Strict international regulations and ethical oversight', 'Funding from private companies only', 'Immediate widespread clinical use'], answer: 1 },
+      ],
+    },
+    passage2: {
+      passage:
+      `Throughout human history, the nature of work has undergone several dramatic transformations, 
+      each driven by technological innovation. 
+      The First Industrial Revolution in the 18th century replaced manual agricultural labor with factory work, 
+      powered by steam engines. 
+      The Second Industrial Revolution brought electricity, mass production, and the assembly line. 
+      The Third Revolution introduced computers and automation, 
+      fundamentally changing how information is processed and communicated. 
+      Now, humanity stands at the threshold of a Fourth Industrial Revolution, 
+      characterized by the convergence of digital, physical, and biological technologies. 
+      Artificial intelligence, robotics, the Internet of Things, and quantum computing 
+      are poised to reshape every sector of the global economy. 
+      The World Economic Forum estimates that by 2025, machines will perform more tasks than humans in the workplace, 
+      potentially displacing 85 million jobs while simultaneously creating 97 million new roles 
+      that require distinctly human skills such as creativity, critical thinking, and emotional intelligence. 
+      South Korea faces particular challenges in this transition. 
+      Its economy is heavily dependent on manufacturing, a sector highly vulnerable to automation. 
+      The Korean government has responded by investing billions of won in reskilling programs, 
+      encouraging workers to develop competencies in areas such as data analysis, AI development, and green technology. 
+      Universities are reforming their curricula to emphasize interdisciplinary thinking and adaptability. 
+      Sociologists argue that the greatest challenge is not technological but human — 
+      ensuring that the benefits of the Fourth Industrial Revolution are distributed fairly 
+      and that no segment of society is left behind in the transition to an automated future.`,
+      questions: [
+        { id: 6, type: 'reading', question: 'What powered the First Industrial Revolution?', options: ['Electricity', 'Steam engines', 'Nuclear power', 'Wind energy'], answer: 1 },
+        { id: 7, type: 'reading', question: 'According to the World Economic Forum, how many jobs might be created by 2025?', options: ['85 million', '90 million', '97 million', '100 million'], answer: 2 },
+        { id: 8, type: 'reading', question: 'Why does South Korea face particular challenges in the Fourth Industrial Revolution?', options: ['Its economy relies heavily on agriculture', 'Its economy is heavily dependent on manufacturing', 'Its workforce lacks basic education', 'Its government opposes technological change'], answer: 1 },
+        { id: 9, type: 'reading', question: 'What human skills does the passage say will remain important?', options: ['Physical strength and speed', 'Memorization and repetition', 'Creativity, critical thinking, and emotional intelligence', 'Language skills only'], answer: 2 },
+        { id: 10, type: 'reading', question: 'According to sociologists, what is the greatest challenge of the Fourth Industrial Revolution?', options: ['Developing faster computers', 'Ensuring fair distribution of benefits and leaving no one behind', 'Building more robots', 'Reducing government spending on technology'], answer: 1 },
+      ],
+    },
+  },
+  grammar: [
+    { id: 11, type: 'grammar', question: 'CRISPR ___ as part of the immune system of bacteria before being adapted for medicine.', options: ['discovers', 'discovered', 'was discovered', 'has discovered'], answer: 2 },
+    { id: 12, type: 'grammar', question: 'The technology is not without controversy, ___ it has enormous potential benefits.', options: ['because', 'although', 'therefore', 'unless'], answer: 1 },
+    { id: 13, type: 'grammar', question: 'By 2025, machines ___ more tasks than humans in the workplace.', options: ['perform', 'performed', 'will be performing', 'have performed'], answer: 2 },
+    { id: 14, type: 'grammar', question: 'Critics warn that unregulated gene editing ___ lead to serious ethical problems.', options: ['can', 'could', 'should', 'must'], answer: 1 },
+    { id: 15, type: 'grammar', question: 'The Korean government has invested billions of won ___ reskilling programs.', options: ['for', 'in', 'on', 'at'], answer: 1 },
+    { id: 16, type: 'grammar', question: 'Universities are reforming their curricula ___ emphasize interdisciplinary thinking.', options: ['for', 'so', 'to', 'that'], answer: 2 },
+    { id: 17, type: 'grammar', question: 'The benefits of the revolution must be ___ fairly across all societies.', options: ['distribute', 'distributes', 'distributed', 'distributing'], answer: 2 },
+    { id: 18, type: 'grammar', question: 'Had strict regulations ___ in place, the gene-editing controversy might have been avoided.', options: ['be', 'been', 'being', 'is'], answer: 1 },
+    { id: 19, type: 'grammar', question: 'The Fourth Industrial Revolution is characterized ___ the convergence of digital and biological technologies.', options: ['with', 'for', 'by', 'from'], answer: 2 },
+    { id: 20, type: 'grammar', question: 'Sociologists argue that ensuring fair distribution is ___ challenging than developing the technology itself.', options: ['more', 'most', 'much', 'very'], answer: 0 },
+  ],
+};
+</file>
 
 <file path="app/admin/consultations/page.tsx">
 import { cookies } from 'next/headers';
@@ -776,6 +1664,25 @@ type Consultation = {
   user_id: string | null;
 };
 
+type TestResult = {
+  id: string;
+  created_at: string;
+  user_id: string;
+  grade_label: string;
+  reading_score: number;
+  grammar_score: number;
+  total_score: number;
+  total_questions: number;
+  sent_to_admin: boolean;
+  wrong_questions: {
+    id: number;
+    type: string;
+    question: string;
+    yourAnswer: string;
+    correctAnswer: string;
+  }[] | null;
+};
+
 type Profile = {
   id: string;
   nickname: string | null;
@@ -791,14 +1698,12 @@ export default async function AdminProfile({
 }) {
   const cookieStore = await cookies();
 
-  // 일반 클라이언트 (profiles 조회용)
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     { cookies: { getAll() { return cookieStore.getAll(); } } }
   );
 
-  // 서비스롤 클라이언트 (유저 목록용)
   const adminSupabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -807,18 +1712,23 @@ export default async function AdminProfile({
 
   const { data: { users } } = await adminSupabase.auth.admin.listUsers();
 
-  // profiles 테이블에서 닉네임 + 아바타 가져오기
   const { data: profiles } = await supabase
     .from('profiles')
     .select('id, nickname, avatar_url');
 
-  // id → profile 맵
   const profileMap: Record<string, Profile> = {};
   profiles?.forEach(p => { profileMap[p.id] = p; });
 
-  // 유저 이메일 맵 (user_id → email)
   const userEmailMap: Record<string, string> = {};
   users?.forEach(u => { if (u.email) userEmailMap[u.id] = u.email; });
+
+  // 원장에게 보낸 테스트 결과
+  const { data: testResults } = await supabase
+    .from('level_test_results')
+    .select('*')
+    .eq('sent_to_admin', true)
+    .order('sent_at', { ascending: false })
+    .limit(10);
 
   return (
     <div className="max-w-4xl mx-auto py-20 px-6 space-y-8">
@@ -850,8 +1760,8 @@ export default async function AdminProfile({
           <p className="text-sm text-slate-500 mt-1">미처리</p>
         </div>
         <div className="bg-blue-50 rounded-2xl p-6 border border-blue-100 shadow-sm text-center">
-          <p className="text-3xl font-black text-blue-600">{consultations.filter(c => c.is_resolved).length}</p>
-          <p className="text-sm text-slate-500 mt-1">처리 완료</p>
+          <p className="text-3xl font-black text-blue-600">{testResults?.length ?? 0}</p>
+          <p className="text-sm text-slate-500 mt-1">받은 테스트</p>
         </div>
       </div>
 
@@ -867,7 +1777,6 @@ export default async function AdminProfile({
               return (
                 <div key={u.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
                   <div className="flex items-center gap-4">
-                    {/* 아바타 */}
                     <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center shrink-0">
                       {profile?.avatar_url ? (
                         <Image src={profile.avatar_url} alt="avatar" width={40} height={40} className="object-cover w-full h-full" />
@@ -895,6 +1804,85 @@ export default async function AdminProfile({
         )}
       </div>
 
+      {/* 학생 테스트 결과 */}
+      <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/60 p-8 border border-slate-100">
+        <h2 className="text-xl font-black text-slate-900 mb-6">📝 받은 학생 테스트 결과</h2>
+        {!testResults || testResults.length === 0 ? (
+          <p className="text-slate-400 text-center py-8">아직 전송받은 테스트 결과가 없습니다.</p>
+        ) : (
+          <div className="space-y-4">
+            {testResults.map((result: TestResult) => {
+              const profile = result.user_id ? profileMap[result.user_id] : null;
+              const email = result.user_id ? userEmailMap[result.user_id] : null;
+              return (
+                <div key={result.id} className="border border-slate-100 rounded-2xl p-6">
+                  {/* 유저 정보 */}
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center shrink-0">
+                      {profile?.avatar_url ? (
+                        <Image src={profile.avatar_url} alt="avatar" width={32} height={32} className="object-cover w-full h-full" />
+                      ) : (
+                        <span className="text-sm">👤</span>
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-900 text-sm">
+                        {profile?.nickname ?? '닉네임 없음'}
+                        {email && <span className="text-slate-400 font-normal ml-1">— {email}</span>}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {new Date(result.created_at).toLocaleDateString('ko-KR', {
+                          year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                        })}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 점수 */}
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    <div className="bg-blue-50 rounded-xl p-3 text-center border border-blue-100">
+                      <p className="text-xs font-black text-blue-600 mb-1">Reading</p>
+                      <p className="text-xl font-black text-slate-900">{result.reading_score}<span className="text-xs text-slate-400">/10</span></p>
+                    </div>
+                    <div className="bg-slate-50 rounded-xl p-3 text-center border border-slate-200">
+                      <p className="text-xs font-black text-slate-600 mb-1">Grammar</p>
+                      <p className="text-xl font-black text-slate-900">{result.grammar_score}<span className="text-xs text-slate-400">/10</span></p>
+                    </div>
+                    <div className="bg-green-50 rounded-xl p-3 text-center border border-green-200">
+                      <p className="text-xs font-black text-green-600 mb-1">Total</p>
+                      <p className="text-xl font-black text-slate-900">{result.total_score}<span className="text-xs text-slate-400">/20</span></p>
+                    </div>
+                  </div>
+
+                  {/* 틀린 문제 */}
+                  {result.wrong_questions && result.wrong_questions.length > 0 && (
+                    <div className="bg-red-50 rounded-xl p-4 border border-red-100">
+                      <p className="text-xs font-black text-red-600 uppercase tracking-widest mb-3">
+                        ❌ 틀린 문제 ({result.wrong_questions.length}개)
+                      </p>
+                      <div className="space-y-3">
+                        {result.wrong_questions.map(wq => (
+                          <div key={wq.id} className="bg-white rounded-xl p-3 border border-red-100">
+                            <p className="text-xs font-black text-slate-500 mb-1">
+                              Q{wq.id}. <span className="text-blue-600">{wq.type === 'reading' ? 'Reading' : 'Grammar'}</span>
+                            </p>
+                            <p className="text-sm text-slate-800 font-medium mb-2">{wq.question}</p>
+                            <div className="flex flex-col gap-1">
+                              <p className="text-xs text-red-500 font-bold">✗ 학생 답: {wq.yourAnswer}</p>
+                              <p className="text-xs text-green-600 font-bold">✓ 정답: {wq.correctAnswer}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* 최근 상담 신청 */}
       <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/60 p-8 border border-slate-100">
         <div className="flex items-center justify-between mb-6">
@@ -912,13 +1900,12 @@ export default async function AdminProfile({
               const email = c.user_id ? userEmailMap[c.user_id] : null;
               return (
                 <div key={c.id} className={`p-5 rounded-2xl border ${c.is_resolved ? 'border-slate-100 bg-white' : 'border-red-100 bg-red-50'}`}>
-                  {/* 유저 정보 */}
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center shrink-0">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-7 h-7 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center shrink-0">
                       {profile?.avatar_url ? (
-                        <Image src={profile.avatar_url} alt="avatar" width={32} height={32} className="object-cover w-full h-full" />
+                        <Image src={profile.avatar_url} alt="avatar" width={28} height={28} className="object-cover w-full h-full" />
                       ) : (
-                        <span className="text-sm">👤</span>
+                        <span className="text-xs">👤</span>
                       )}
                     </div>
                     <p className="text-sm font-bold text-slate-700">
@@ -926,7 +1913,6 @@ export default async function AdminProfile({
                       {email && <span className="text-slate-400 font-normal ml-1">— {email}</span>}
                     </p>
                   </div>
-
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <div>
                       <span className={`text-xs font-bold px-2 py-0.5 rounded-full mr-2 ${c.is_resolved ? 'bg-blue-100 text-blue-600' : 'bg-red-100 text-red-500'}`}>
@@ -935,12 +1921,10 @@ export default async function AdminProfile({
                       <span className="text-xs text-slate-400">{new Date(c.created_at).toLocaleDateString('ko-KR')}</span>
                     </div>
                   </div>
-
                   <div className="mt-2 text-sm text-slate-600 space-y-0.5">
-                    <p><span className="font-bold text-slate-700">학부모님 성함:</span> {c.parent_name}</p>
-                    <p><span className="font-bold text-slate-700">학생 이름:</span> {c.child_name} ({c.child_grade})</p>
+                    <p><span className="font-bold">학부모님 성함:</span> {c.parent_name}</p>
+                    <p><span className="font-bold">학생 이름:</span> {c.child_name} ({c.child_grade})</p>
                   </div>
-
                   {c.message && <p className="text-sm text-slate-500 mt-2 bg-slate-100 p-3 rounded-xl truncate">{c.message}</p>}
                 </div>
               );
@@ -957,7 +1941,7 @@ export default async function AdminProfile({
 <file path="components/profile/ProfileClient.tsx">
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -979,7 +1963,18 @@ type Consultation = {
   replied_at: string | null;
 };
 
-type Tab = 'profile' | 'consultations' | 'settings';
+type TestResult = {
+  id: string;
+  created_at: string;
+  grade: string;
+  grade_label: string;
+  reading_score: number;
+  grammar_score: number;
+  total_score: number;
+  total_questions: number;
+};
+
+type Tab = 'profile' | 'tests' | 'consultations' | 'settings';
 
 export default function ProfileClient({
   userEmail, userId, profile, consultations
@@ -996,20 +1991,30 @@ export default function ProfileClient({
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [testResults, setTestResults] = useState<TestResult[]>([]);
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [sentIds, setSentIds] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const fetchTestResults = async () => {
+      const { data } = await supabase
+        .from('level_test_results')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+      if (data) setTestResults(data);
+    };
+    fetchTestResults();
+  }, [userId]);
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
-
     const ext = file.name.split('.').pop();
     const path = `${userId}/avatar.${ext}`;
-
-    const { error } = await supabase.storage
-      .from('avatars')
-      .upload(path, file, { upsert: true });
-
+    const { error } = await supabase.storage.from('avatars').upload(path, file, { upsert: true });
     if (!error) {
       const { data } = supabase.storage.from('avatars').getPublicUrl(path);
       const url = data.publicUrl + '?t=' + Date.now();
@@ -1032,8 +2037,26 @@ export default function ProfileClient({
     window.location.href = '/';
   };
 
+  const handleSendResult = async (result: TestResult) => {
+    setSendingId(result.id);
+    await supabase.from('level_test_results').update({
+      sent_to_admin: true,
+      sent_at: new Date().toISOString(),
+    }).eq('id', result.id);
+    setSentIds(prev => [...prev, result.id]);
+    setSendingId(null);
+  };
+
+  const getScoreColor = (score: number, total: number) => {
+    const pct = score / total;
+    if (pct >= 0.8) return 'text-green-600';
+    if (pct >= 0.5) return 'text-amber-600';
+    return 'text-red-500';
+  };
+
   const tabs: { id: Tab; label: string }[] = [
     { id: 'profile', label: '내 프로필' },
+    { id: 'tests', label: '레벨테스트' },
     { id: 'consultations', label: '상담 내역' },
     { id: 'settings', label: '설정' },
   ];
@@ -1041,10 +2064,10 @@ export default function ProfileClient({
   return (
     <div className="max-w-3xl mx-auto py-20 px-6">
       {/* 탭 */}
-      <div className="flex gap-2 mb-8 bg-white rounded-2xl p-2 border border-slate-100 shadow-sm">
+      <div className="flex gap-2 mb-8 bg-white rounded-2xl p-2 border border-slate-100 shadow-sm overflow-x-auto">
         {tabs.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 py-3 rounded-xl font-bold text-sm transition cursor-pointer ${
+            className={`flex-1 py-3 rounded-xl font-bold text-sm transition cursor-pointer whitespace-nowrap ${
               activeTab === tab.id
                 ? 'bg-slate-900 text-white shadow'
                 : 'text-slate-500 hover:text-slate-900'
@@ -1064,7 +2087,6 @@ export default function ProfileClient({
               <h1 className="text-2xl font-black text-slate-900">내 프로필</h1>
             </div>
 
-            {/* 아바타 */}
             <div className="flex flex-col items-center mb-8">
               <div
                 className="w-28 h-28 rounded-full border-4 border-slate-100 shadow-lg overflow-hidden bg-slate-100 flex items-center justify-center cursor-pointer hover:opacity-80 transition relative"
@@ -1088,13 +2110,11 @@ export default function ProfileClient({
               </button>
             </div>
 
-            {/* 이메일 */}
             <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 mb-4">
               <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">이메일</p>
               <p className="font-bold text-slate-900">{userEmail}</p>
             </div>
 
-            {/* 닉네임 */}
             <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100">
               <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">닉네임</p>
               <div className="flex gap-2">
@@ -1111,6 +2131,91 @@ export default function ProfileClient({
               </div>
               {saveMsg && <p className="text-blue-600 text-xs font-bold mt-2">{saveMsg}</p>}
             </div>
+          </div>
+        )}
+
+        {/* 레벨테스트 탭 */}
+        {activeTab === 'tests' && (
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-black text-slate-900">📝 레벨테스트 내역</h2>
+              <Link href="/level-test"
+                className="text-sm font-bold text-blue-600 hover:underline">
+                테스트 보러가기 →
+              </Link>
+            </div>
+
+            {testResults.length === 0 ? (
+              <div className="bg-slate-50 rounded-2xl p-10 text-center border border-slate-100">
+                <p className="text-slate-400 mb-4">아직 레벨테스트 내역이 없습니다.</p>
+                <Link href="/level-test" className="text-blue-600 font-bold hover:underline">
+                  레벨테스트 하러 가기 →
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {testResults.map(result => {
+                  const isSent = sentIds.includes(result.id) || (result as any).sent_to_admin;
+                  return (
+                    <div key={result.id} className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+                      {/* 헤더 */}
+                      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                        <div>
+                          <p className="font-black text-slate-900 text-lg">{result.grade_label}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            {new Date(result.created_at).toLocaleDateString('ko-KR', {
+                              year: 'numeric', month: 'long', day: 'numeric',
+                              hour: '2-digit', minute: '2-digit'
+                            })}
+                          </p>
+                        </div>
+                        <span className={`text-2xl font-black ${getScoreColor(result.total_score, result.total_questions)}`}>
+                          {result.total_score} / {result.total_questions}
+                        </span>
+                      </div>
+
+                      {/* 점수 상세 */}
+                      <div className="grid grid-cols-2 gap-3 mb-4">
+                        <div className="bg-blue-50 rounded-xl p-4 text-center border border-blue-100">
+                          <p className="text-xs font-black text-blue-600 uppercase tracking-widest mb-1">Reading</p>
+                          <p className={`text-2xl font-black ${getScoreColor(result.reading_score, 10)}`}>
+                            {result.reading_score}
+                          </p>
+                          <p className="text-xs text-slate-400">/ 10</p>
+                        </div>
+                        <div className="bg-slate-50 rounded-xl p-4 text-center border border-slate-200">
+                          <p className="text-xs font-black text-slate-600 uppercase tracking-widest mb-1">Grammar</p>
+                          <p className={`text-2xl font-black ${getScoreColor(result.grammar_score, 10)}`}>
+                            {result.grammar_score}
+                          </p>
+                          <p className="text-xs text-slate-400">/ 10</p>
+                        </div>
+                      </div>
+
+                      {/* 원장님께 결과 보내기 */}
+                      <div className={`rounded-xl p-4 border ${isSent ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+                        {isSent ? (
+                          <p className="text-sm font-bold text-green-700">✅ 원장님께 결과를 전송했습니다.</p>
+                        ) : (
+                          <div className="flex items-center justify-between gap-3 flex-wrap">
+                            <p className="text-sm text-amber-800 font-medium">
+                              원장님께 이 결과를 보내시겠어요?
+                            </p>
+                            <button
+                              onClick={() => handleSendResult(result)}
+                              disabled={sendingId === result.id}
+                              className="px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-blue-600 transition cursor-pointer disabled:opacity-50 shrink-0"
+                            >
+                              {sendingId === result.id ? '전송 중...' : '원장님께 결과 보내기'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -1172,9 +2277,7 @@ export default function ProfileClient({
         {activeTab === 'settings' && (
           <div>
             <h2 className="text-2xl font-black text-slate-900 mb-8">⚙️ 설정</h2>
-
             <div className="space-y-4">
-              {/* 비밀번호 변경 */}
               <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100">
                 <h3 className="font-black text-slate-900 mb-1">비밀번호 변경</h3>
                 <p className="text-sm text-slate-500 mb-4">이메일로 비밀번호 재설정 링크를 받아요.</p>
@@ -1184,7 +2287,6 @@ export default function ProfileClient({
                 </Link>
               </div>
 
-              {/* 닉네임 변경 */}
               <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100">
                 <h3 className="font-black text-slate-900 mb-1">닉네임 변경</h3>
                 <p className="text-sm text-slate-500 mb-4">프로필에 표시될 닉네임을 변경해요.</p>
@@ -1203,7 +2305,6 @@ export default function ProfileClient({
                 {saveMsg && <p className="text-blue-600 text-xs font-bold mt-2">{saveMsg}</p>}
               </div>
 
-              {/* 계정 삭제 */}
               <div className="p-6 bg-red-50 rounded-2xl border border-red-100">
                 <h3 className="font-black text-red-600 mb-1">계정 삭제</h3>
                 <p className="text-sm text-slate-500 mb-4">계정을 삭제하면 모든 데이터가 사라지며 복구할 수 없어요.</p>
@@ -1231,15 +2332,105 @@ export default function ProfileClient({
             </div>
           </div>
         )}
-
       </div>
     </div>
   );
 }
 </file>
 
-<file path="lib/hello.py">
+<file path="lib/levelTests/a1.ts">
+import type { GradeTest } from './types';
 
+export const A1Test: GradeTest = {
+  grade: 'a1',
+  gradeLabel: '초등학교 1학년',
+  reading: {
+    passage1: {
+      passage: `I have a cat. Her name is Nabi. Nabi is white. She likes fish. I love Nabi.`,
+      questions: [
+        { id: 1, type: 'reading', question: "What is the cat's name?", options: ['Mimi', 'Nabi', 'Coco', 'Lulu'], answer: 1 },
+        { id: 2, type: 'reading', question: 'What color is Nabi?', options: ['Black', 'Brown', 'White', 'Orange'], answer: 2 },
+        { id: 3, type: 'reading', question: 'What does Nabi like?', options: ['Milk', 'Fish', 'Chicken', 'Rice'], answer: 1 },
+        { id: 4, type: 'reading', question: 'What animal does the writer have?', options: ['Dog', 'Bird', 'Cat', 'Fish'], answer: 2 },
+        { id: 5, type: 'reading', question: 'How does the writer feel about Nabi?', options: ['Scared', 'Sad', 'Angry', 'Loves her'], answer: 3 },
+      ],
+    },
+    passage2: {
+      passage: `My name is Minho. I am seven years old. I go to school. My school is big. I like my school.`,
+      questions: [
+        { id: 6, type: 'reading', question: 'How old is Minho?', options: ['Six', 'Seven', 'Eight', 'Nine'], answer: 1 },
+        { id: 7, type: 'reading', question: "What is the boy's name?", options: ['Junho', 'Minho', 'Sinho', 'Jiho'], answer: 1 },
+        { id: 8, type: 'reading', question: 'How is his school?', options: ['Small', 'Old', 'Big', 'New'], answer: 2 },
+        { id: 9, type: 'reading', question: 'Where does Minho go?', options: ['Park', 'Market', 'School', 'Hospital'], answer: 2 },
+        { id: 10, type: 'reading', question: 'Does Minho like his school?', options: ["Yes, he does", "No, he doesn't", 'Maybe', "I don't know"], answer: 0 },
+      ],
+    },
+  },
+  grammar: [
+    { id: 11, type: 'grammar', question: 'I ___ a student.', options: ['am', 'is', 'are', 'be'], answer: 0 },
+    { id: 12, type: 'grammar', question: 'She ___ a dog.', options: ['have', 'has', 'had', 'haves'], answer: 1 },
+    { id: 13, type: 'grammar', question: 'This is ___ apple.', options: ['a', 'an', 'the', 'some'], answer: 1 },
+    { id: 14, type: 'grammar', question: 'They ___ happy.', options: ['am', 'is', 'are', 'be'], answer: 2 },
+    { id: 15, type: 'grammar', question: 'I like ___. (고양이를 좋아한다)', options: ['dogs', 'cats', 'birds', 'fish'], answer: 1 },
+    { id: 16, type: 'grammar', question: 'He ___ to school every day.', options: ['go', 'goes', 'going', 'went'], answer: 1 },
+    { id: 17, type: 'grammar', question: 'What color is this? ___ is red.', options: ['He', 'She', 'It', 'They'], answer: 2 },
+    { id: 18, type: 'grammar', question: '___ your name?', options: ['What are', 'What is', 'Who are', 'Who is'], answer: 1 },
+    { id: 19, type: 'grammar', question: 'I have ___ pencils. (연필 두 자루)', options: ['one', 'two', 'three', 'four'], answer: 1 },
+    { id: 20, type: 'grammar', question: 'The cat ___ sleeping now.', options: ['am', 'is', 'are', 'be'], answer: 1 },
+  ],
+};
+</file>
+
+<file path="lib/levelTests/index.ts">
+import type { GradeTest } from './types';
+
+export type GradeKey = 'a1' | 'a2' | 'a3' | 'a4' | 'a5' | 'a6' | 'b1' | 'b2' | 'b3';
+
+export async function getTest(grade: GradeKey): Promise<GradeTest | null> {
+  try {
+    switch (grade) {
+      case 'a1': return (await import('./a1')).A1Test;
+      case 'a2': return (await import('./a2')).A2Test;
+      case 'a3': return (await import('./a3')).A3Test;
+      case 'a4': return (await import('./a4')).A4Test;
+      case 'a5': return (await import('./a5')).A5Test;
+      case 'a6': return (await import('./a6')).A6Test;
+      case 'b1': return (await import('./b1')).B1Test;
+      case 'b2': return (await import('./b2')).B2Test;
+      case 'b3': return (await import('./b3')).B3Test;
+      default: return null;
+    }
+  } catch {
+    return null;
+  }
+}
+
+export const gradeKeys: GradeKey[] = ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'b1', 'b2', 'b3'];
+</file>
+
+<file path="lib/levelTests/types.ts">
+export type Question = {
+  id: number;
+  type: 'reading' | 'grammar';
+  question: string;
+  options: string[];
+  answer: number;
+};
+
+export type ReadingSection = {
+  passage: string;
+  questions: Question[];
+};
+
+export type GradeTest = {
+  grade: string;
+  gradeLabel: string;
+  reading: {
+    passage1: ReadingSection;
+    passage2: ReadingSection;
+  };
+  grammar: Question[];
+};
 </file>
 
 <file path="proxy.ts">
@@ -1270,6 +2461,12 @@ export async function proxy(req: NextRequest) {
   await supabase.auth.getUser()
 
   return res
+}
+
+export const config = {
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|login|register|auth|find-password|reset-password|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
 }
 </file>
 
@@ -1399,49 +2596,6 @@ export default function AcademyAboutPage() {
       </section>
     </div>
   );
-}
-</file>
-
-<file path="app/auth/logout/route.ts">
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
-import { NextResponse } from 'next/server';
-
-export async function POST(request: Request) {
-  const cookieStore = await cookies();
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          );
-        },
-      },
-    }
-  );
-
-  await supabase.auth.signOut();
-
-  const response = NextResponse.json({ success: true });
-
-  // sb- 로 시작하는 Supabase 쿠키 전부 강제 만료
-  cookieStore.getAll().forEach((cookie) => {
-    if (cookie.name.startsWith('sb-')) {
-      response.cookies.set(cookie.name, '', {
-        maxAge: 0,
-        path: '/',
-      });
-    }
-  });
-
-  return response;
 }
 </file>
 
@@ -1737,24 +2891,6 @@ const eslintConfig = defineConfig([
 export default eslintConfig;
 </file>
 
-<file path="next.config.ts">
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'artsmxtzahjsjclonrkh.supabase.co',
-        pathname: '/storage/v1/object/public/**',
-      },
-    ],
-  },
-};
-
-export default nextConfig;
-</file>
-
 <file path="postcss.config.mjs">
 const config = {
   plugins: {
@@ -1763,6 +2899,94 @@ const config = {
 };
 
 export default config;
+</file>
+
+<file path="tsconfig.json">
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "noEmit": true,
+    "incremental": true,
+    "module": "esnext",
+    "esModuleInterop": true,
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    "**/*.mts",
+    "**/*.ts",
+    "**/*.tsx"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
+</file>
+
+<file path="app/auth/logout/route.ts">
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
+import { NextResponse } from 'next/server';
+
+export async function POST(request: Request) {
+  const cookieStore = await cookies();
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
+
+  await supabase.auth.signOut();
+
+  const response = NextResponse.json({ success: true });
+
+  // sb- 로 시작하는 Supabase 쿠키 전부 강제 만료
+  cookieStore.getAll().forEach((cookie) => {
+    if (cookie.name.startsWith('sb-')) {
+      response.cookies.set(cookie.name, '', {
+        maxAge: 0,
+        path: '/',
+      });
+    }
+  });
+
+  return response;
+}
 </file>
 
 <file path="app/consultation/page.tsx">
@@ -2318,6 +3542,180 @@ export default function RegisterPage() {
 }
 </file>
 
+<file path="lib/supabase/client.ts">
+import { createBrowserClient } from '@supabase/ssr';
+
+export const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+</file>
+
+<file path="lib/supabase/server.ts">
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+
+export function createClient() {
+  const cookieStore = cookies()
+
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll()
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            )
+          } catch {
+            // 무시
+          }
+        },
+      },
+    }
+  )
+}
+</file>
+
+<file path="next.config.ts">
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'artsmxtzahjsjclonrkh.supabase.co',
+        pathname: '/storage/v1/object/public/**',
+      },
+    ],
+  },
+};
+
+export default nextConfig;
+</file>
+
+<file path="package.json">
+{
+  "name": "the-ark-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.10.2",
+    "@supabase/supabase-js": "^2.103.0",
+    "next": "15.3.2",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "swiper": "^12.1.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "15.3.2",
+    "typescript": "^5"
+  }
+}
+</file>
+
+<file path="app/layout.tsx">
+// app/layout.tsx
+import './globals.css';
+import Link from 'next/link';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
+import LogoutButton from '@/components/dashboard/LogoutButton';
+
+export const dynamic = 'force-dynamic';
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const cookieStore = await cookies();
+  
+  // app/layout.tsx 내부
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll(); },
+        // ✅ 이 setAll이 반드시 있어야 로그인이 유지됩니다.
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch (error) {
+            // 서버 컴포넌트 에러는 무시
+          }
+        },
+      },
+    }
+  );
+
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user;
+
+  return (
+    <html lang="ko" className="bg-slate-50">
+      <body className="antialiased font-sans text-slate-900 flex flex-col min-h-screen bg-slate-50">
+        <nav className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-slate-200 px-8 py-5 shadow-sm">
+          <div className="max-w-[1600px] mx-auto flex items-center justify-between">
+            <Link href="/" className="text-2xl font-black text-slate-900 tracking-tighter flex items-center gap-2">
+              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white text-sm font-bold">A</div>
+              <span>THE ARK <span className="text-blue-600">ENGLISH</span></span>
+            </Link>
+
+            <div className="flex items-center gap-8">
+              <div className="hidden md:flex items-center gap-8 font-bold text-[15px] text-slate-600 mr-4">
+                <Link href="/academy" className="hover:text-blue-600 transition">학원 소개</Link>
+                <Link href="/level-test" className="hover:text-blue-600 transition">레벨 테스트</Link>
+              </div>
+              <div className="hidden md:block h-4 w-[1px] bg-slate-200" />
+              
+              <div className="flex items-center gap-6 font-bold text-[15px]">
+                {user ? (
+                  <>
+                    <LogoutButton />
+                    <Link href="/profile" className="text-blue-600 hover:text-blue-800 transition">내 프로필</Link>
+                  </>
+                ) : (
+                  <>
+                    <Link href="/login" className="text-slate-500 hover:text-slate-900 transition">로그인</Link>
+                    <Link href="/register" className="text-slate-500 hover:text-slate-900 transition">회원가입</Link>
+                  </>
+                )}
+              </div>
+
+              <Link href="/consultation">
+                <button className="hidden sm:block bg-slate-900 text-white px-7 py-3 rounded-full text-[14px] font-black hover:bg-blue-600 transition shadow-lg shadow-slate-100 active:scale-95">
+                  빠른 상담 신청
+                </button>
+              </Link>
+            </div>
+          </div>
+        </nav>
+
+        <main className="flex-grow pt-24 bg-slate-50 relative z-0">
+          {children}
+        </main>
+      </body>
+    </html>
+  );
+}
+</file>
+
 <file path="app/login/page.tsx">
 'use client';
 
@@ -2478,124 +3876,6 @@ export default async function ProfilePage() {
       profile={profile}
       consultations={myConsultations ?? []}
     />
-  );
-}
-</file>
-
-<file path="package.json">
-{
-  "name": "the-ark-web",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
-  },
-  "dependencies": {
-    "@supabase/ssr": "^0.10.2",
-    "@supabase/supabase-js": "^2.103.0",
-    "next": "16.2.3",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "swiper": "^12.1.3"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.3",
-    "tailwindcss": "^4",
-    "typescript": "^5"
-  }
-}
-</file>
-
-<file path="app/layout.tsx">
-// app/layout.tsx
-import './globals.css';
-import Link from 'next/link';
-import { cookies } from 'next/headers';
-import { createServerClient } from '@supabase/ssr';
-import LogoutButton from '@/components/dashboard/LogoutButton';
-
-export const dynamic = 'force-dynamic';
-
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const cookieStore = await cookies();
-  
-  // app/layout.tsx 내부
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll(); },
-        // ✅ 이 setAll이 반드시 있어야 로그인이 유지됩니다.
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
-          } catch (error) {
-            // 서버 컴포넌트 에러는 무시
-          }
-        },
-      },
-    }
-  );
-
-  const { data: { session } } = await supabase.auth.getSession();
-  const user = session?.user;
-
-  return (
-    <html lang="ko" className="bg-slate-50">
-      <body className="antialiased font-sans text-slate-900 flex flex-col min-h-screen bg-slate-50">
-        <nav className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-slate-200 px-8 py-5 shadow-sm">
-          <div className="max-w-[1600px] mx-auto flex items-center justify-between">
-            <Link href="/" className="text-2xl font-black text-slate-900 tracking-tighter flex items-center gap-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white text-sm font-bold">A</div>
-              <span>THE ARK <span className="text-blue-600">ENGLISH</span></span>
-            </Link>
-
-            <div className="flex items-center gap-8">
-              <div className="hidden md:flex items-center gap-8 font-bold text-[15px] text-slate-600 mr-4">
-                <Link href="/academy" className="hover:text-blue-600 transition">학원 소개</Link>
-                <Link href="/level-test" className="hover:text-blue-600 transition">레벨 테스트</Link>
-              </div>
-              <div className="hidden md:block h-4 w-[1px] bg-slate-200" />
-              
-              <div className="flex items-center gap-6 font-bold text-[15px]">
-                {user ? (
-                  <>
-                    <LogoutButton />
-                    <Link href="/profile" className="text-blue-600 hover:text-blue-800 transition">내 프로필</Link>
-                  </>
-                ) : (
-                  <>
-                    <Link href="/login" className="text-slate-500 hover:text-slate-900 transition">로그인</Link>
-                    <Link href="/register" className="text-slate-500 hover:text-slate-900 transition">회원가입</Link>
-                  </>
-                )}
-              </div>
-
-              <Link href="/consultation">
-                <button className="hidden sm:block bg-slate-900 text-white px-7 py-3 rounded-full text-[14px] font-black hover:bg-blue-600 transition shadow-lg shadow-slate-100 active:scale-95">
-                  빠른 상담 신청
-                </button>
-              </Link>
-            </div>
-          </div>
-        </nav>
-
-        <main className="flex-grow pt-24 bg-slate-50 relative z-0">
-          {children}
-        </main>
-      </body>
-    </html>
   );
 }
 </file>

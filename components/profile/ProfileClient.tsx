@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -22,7 +22,18 @@ type Consultation = {
   replied_at: string | null;
 };
 
-type Tab = 'profile' | 'consultations' | 'settings';
+type TestResult = {
+  id: string;
+  created_at: string;
+  grade: string;
+  grade_label: string;
+  reading_score: number;
+  grammar_score: number;
+  total_score: number;
+  total_questions: number;
+};
+
+type Tab = 'profile' | 'tests' | 'consultations' | 'settings';
 
 export default function ProfileClient({
   userEmail, userId, profile, consultations
@@ -39,20 +50,30 @@ export default function ProfileClient({
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [testResults, setTestResults] = useState<TestResult[]>([]);
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [sentIds, setSentIds] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const fetchTestResults = async () => {
+      const { data } = await supabase
+        .from('level_test_results')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+      if (data) setTestResults(data);
+    };
+    fetchTestResults();
+  }, [userId]);
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
-
     const ext = file.name.split('.').pop();
     const path = `${userId}/avatar.${ext}`;
-
-    const { error } = await supabase.storage
-      .from('avatars')
-      .upload(path, file, { upsert: true });
-
+    const { error } = await supabase.storage.from('avatars').upload(path, file, { upsert: true });
     if (!error) {
       const { data } = supabase.storage.from('avatars').getPublicUrl(path);
       const url = data.publicUrl + '?t=' + Date.now();
@@ -75,8 +96,26 @@ export default function ProfileClient({
     window.location.href = '/';
   };
 
+  const handleSendResult = async (result: TestResult) => {
+    setSendingId(result.id);
+    await supabase.from('level_test_results').update({
+      sent_to_admin: true,
+      sent_at: new Date().toISOString(),
+    }).eq('id', result.id);
+    setSentIds(prev => [...prev, result.id]);
+    setSendingId(null);
+  };
+
+  const getScoreColor = (score: number, total: number) => {
+    const pct = score / total;
+    if (pct >= 0.8) return 'text-green-600';
+    if (pct >= 0.5) return 'text-amber-600';
+    return 'text-red-500';
+  };
+
   const tabs: { id: Tab; label: string }[] = [
     { id: 'profile', label: '내 프로필' },
+    { id: 'tests', label: '레벨테스트' },
     { id: 'consultations', label: '상담 내역' },
     { id: 'settings', label: '설정' },
   ];
@@ -84,10 +123,10 @@ export default function ProfileClient({
   return (
     <div className="max-w-3xl mx-auto py-20 px-6">
       {/* 탭 */}
-      <div className="flex gap-2 mb-8 bg-white rounded-2xl p-2 border border-slate-100 shadow-sm">
+      <div className="flex gap-2 mb-8 bg-white rounded-2xl p-2 border border-slate-100 shadow-sm overflow-x-auto">
         {tabs.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 py-3 rounded-xl font-bold text-sm transition cursor-pointer ${
+            className={`flex-1 py-3 rounded-xl font-bold text-sm transition cursor-pointer whitespace-nowrap ${
               activeTab === tab.id
                 ? 'bg-slate-900 text-white shadow'
                 : 'text-slate-500 hover:text-slate-900'
@@ -107,7 +146,6 @@ export default function ProfileClient({
               <h1 className="text-2xl font-black text-slate-900">내 프로필</h1>
             </div>
 
-            {/* 아바타 */}
             <div className="flex flex-col items-center mb-8">
               <div
                 className="w-28 h-28 rounded-full border-4 border-slate-100 shadow-lg overflow-hidden bg-slate-100 flex items-center justify-center cursor-pointer hover:opacity-80 transition relative"
@@ -131,13 +169,11 @@ export default function ProfileClient({
               </button>
             </div>
 
-            {/* 이메일 */}
             <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 mb-4">
               <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">이메일</p>
               <p className="font-bold text-slate-900">{userEmail}</p>
             </div>
 
-            {/* 닉네임 */}
             <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100">
               <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">닉네임</p>
               <div className="flex gap-2">
@@ -154,6 +190,91 @@ export default function ProfileClient({
               </div>
               {saveMsg && <p className="text-blue-600 text-xs font-bold mt-2">{saveMsg}</p>}
             </div>
+          </div>
+        )}
+
+        {/* 레벨테스트 탭 */}
+        {activeTab === 'tests' && (
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-black text-slate-900">📝 레벨테스트 내역</h2>
+              <Link href="/level-test"
+                className="text-sm font-bold text-blue-600 hover:underline">
+                테스트 보러가기 →
+              </Link>
+            </div>
+
+            {testResults.length === 0 ? (
+              <div className="bg-slate-50 rounded-2xl p-10 text-center border border-slate-100">
+                <p className="text-slate-400 mb-4">아직 레벨테스트 내역이 없습니다.</p>
+                <Link href="/level-test" className="text-blue-600 font-bold hover:underline">
+                  레벨테스트 하러 가기 →
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {testResults.map(result => {
+                  const isSent = sentIds.includes(result.id) || (result as any).sent_to_admin;
+                  return (
+                    <div key={result.id} className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+                      {/* 헤더 */}
+                      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                        <div>
+                          <p className="font-black text-slate-900 text-lg">{result.grade_label}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            {new Date(result.created_at).toLocaleDateString('ko-KR', {
+                              year: 'numeric', month: 'long', day: 'numeric',
+                              hour: '2-digit', minute: '2-digit'
+                            })}
+                          </p>
+                        </div>
+                        <span className={`text-2xl font-black ${getScoreColor(result.total_score, result.total_questions)}`}>
+                          {result.total_score} / {result.total_questions}
+                        </span>
+                      </div>
+
+                      {/* 점수 상세 */}
+                      <div className="grid grid-cols-2 gap-3 mb-4">
+                        <div className="bg-blue-50 rounded-xl p-4 text-center border border-blue-100">
+                          <p className="text-xs font-black text-blue-600 uppercase tracking-widest mb-1">Reading</p>
+                          <p className={`text-2xl font-black ${getScoreColor(result.reading_score, 10)}`}>
+                            {result.reading_score}
+                          </p>
+                          <p className="text-xs text-slate-400">/ 10</p>
+                        </div>
+                        <div className="bg-slate-50 rounded-xl p-4 text-center border border-slate-200">
+                          <p className="text-xs font-black text-slate-600 uppercase tracking-widest mb-1">Grammar</p>
+                          <p className={`text-2xl font-black ${getScoreColor(result.grammar_score, 10)}`}>
+                            {result.grammar_score}
+                          </p>
+                          <p className="text-xs text-slate-400">/ 10</p>
+                        </div>
+                      </div>
+
+                      {/* 원장님께 결과 보내기 */}
+                      <div className={`rounded-xl p-4 border ${isSent ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+                        {isSent ? (
+                          <p className="text-sm font-bold text-green-700">✅ 원장님께 결과를 전송했습니다.</p>
+                        ) : (
+                          <div className="flex items-center justify-between gap-3 flex-wrap">
+                            <p className="text-sm text-amber-800 font-medium">
+                              원장님께 이 결과를 보내시겠어요?
+                            </p>
+                            <button
+                              onClick={() => handleSendResult(result)}
+                              disabled={sendingId === result.id}
+                              className="px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-blue-600 transition cursor-pointer disabled:opacity-50 shrink-0"
+                            >
+                              {sendingId === result.id ? '전송 중...' : '원장님께 결과 보내기'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -215,9 +336,7 @@ export default function ProfileClient({
         {activeTab === 'settings' && (
           <div>
             <h2 className="text-2xl font-black text-slate-900 mb-8">⚙️ 설정</h2>
-
             <div className="space-y-4">
-              {/* 비밀번호 변경 */}
               <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100">
                 <h3 className="font-black text-slate-900 mb-1">비밀번호 변경</h3>
                 <p className="text-sm text-slate-500 mb-4">이메일로 비밀번호 재설정 링크를 받아요.</p>
@@ -227,7 +346,6 @@ export default function ProfileClient({
                 </Link>
               </div>
 
-              {/* 닉네임 변경 */}
               <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100">
                 <h3 className="font-black text-slate-900 mb-1">닉네임 변경</h3>
                 <p className="text-sm text-slate-500 mb-4">프로필에 표시될 닉네임을 변경해요.</p>
@@ -246,7 +364,6 @@ export default function ProfileClient({
                 {saveMsg && <p className="text-blue-600 text-xs font-bold mt-2">{saveMsg}</p>}
               </div>
 
-              {/* 계정 삭제 */}
               <div className="p-6 bg-red-50 rounded-2xl border border-red-100">
                 <h3 className="font-black text-red-600 mb-1">계정 삭제</h3>
                 <p className="text-sm text-slate-500 mb-4">계정을 삭제하면 모든 데이터가 사라지며 복구할 수 없어요.</p>
@@ -274,7 +391,6 @@ export default function ProfileClient({
             </div>
           </div>
         )}
-
       </div>
     </div>
   );
